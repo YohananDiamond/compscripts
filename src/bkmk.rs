@@ -6,9 +6,6 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 
-// TODO: Add a custom bookmarks file via env var
-// TODO: Add a duplicated URL checker
-
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct Bookmark {
     id: u32,
@@ -39,7 +36,10 @@ fn run() -> i32 {
     let options = Opts::parse();
     let path_str = match options.path {
         Some(cfg) => cfg,
-        None => format!("{}/.local/share/bkmk", std::env::var("HOME").unwrap()), // might crash on some alien system
+        None => std::env::var("BKMK_FILE").unwrap_or(format!(
+            "{}/.local/share/bkmk",
+            std::env::var("HOME").unwrap()
+        )),
     };
     let path = Path::new(&path_str);
 
@@ -107,28 +107,32 @@ fn open_file(path: &Path, create_if_needed: bool) -> Result<File, String> {
         }
     } else {
         if create_if_needed {
-        if let Some(parent) = path.parent() {
-            if parent.exists() {
-                if parent.is_file() {
-                    return Err(format!(
-                        "parent path {} is not a directory",
-                        parent.display()
-                    ));
-                }
-            } else {
-                if let Err(e) = std::fs::create_dir(parent) {
-                    return Err(format!("failed to create parent path {}: {}", parent.display(), e));
+            if let Some(parent) = path.parent() {
+                if parent.exists() {
+                    if parent.is_file() {
+                        return Err(format!(
+                            "parent path {} is not a directory",
+                            parent.display()
+                        ));
+                    }
+                } else {
+                    if let Err(e) = std::fs::create_dir(parent) {
+                        return Err(format!(
+                            "failed to create parent path {}: {}",
+                            parent.display(),
+                            e
+                        ));
+                    }
                 }
             }
-        }
 
-        match File::create(path) {
-            Ok(_) => match File::open(path) {
-                Ok(f) => Ok(f),
-                Err(e) => Err(format!("{}", e)),
-            },
-            Err(e) => Err(format!("failed to create file: {}", e)),
-        }
+            match File::create(path) {
+                Ok(_) => match File::open(path) {
+                    Ok(f) => Ok(f),
+                    Err(e) => Err(format!("{}", e)),
+                },
+                Err(e) => Err(format!("failed to create file: {}", e)),
+            }
         } else {
             Err("file does not exist".into())
         }
@@ -143,7 +147,7 @@ mod argparse {
         #[clap(
             short,
             long,
-            about = "the path to the bookmarks file (default: ~/.local/share/bkmk)"
+            about = "the path to the bookmarks file (default: $BKMK_FILE -> ~/.local/share/bkmk)"
         )]
         pub path: Option<String>,
         #[clap(subcommand)]
@@ -219,7 +223,7 @@ fn get_webpage_title(url: &str) -> Result<String, String> {
                 vec.extend_from_slice(data);
                 Ok(data.len())
             })
-        .unwrap();
+            .unwrap();
 
         let _ = transfer.perform();
     }

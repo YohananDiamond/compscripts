@@ -1,10 +1,12 @@
+DESTDIR := ~/.local/bin
 .PHONY: output install run
 
-output:
+output: $(DEPS)
 	cargo build --bin bkmk --release
 
-install:
-	@echo INCOMPLETE
+install: output
+	@echo Installing to $(DESTDIR)...
+	cp target/release/bkmk -t $(DESTDIR)
 
 run:
 	@echo 'The "run" action is disabled here, since multiple binaries are being made.'
