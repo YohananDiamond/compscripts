@@ -1,3 +1,5 @@
+mod lib;
+
 use clap::Clap;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -5,6 +7,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
+use lib::fzagnostic;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct Bookmark {
@@ -172,34 +175,6 @@ mod argparse {
     #[derive(Clap)]
     pub struct AddFromFile {
         pub file: String,
-    }
-}
-
-fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
-    match std::process::Command::new("fzagnostic")
-        .args(&["-h", &format!("{}", height), "-p", prompt])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-    {
-        Ok(mut child) => {
-            let stdin = child.stdin.as_mut().unwrap();
-            write!(stdin, "{}", input).unwrap();
-
-            if child.wait().unwrap().code().unwrap() == 0 {
-                let mut choice = String::new();
-                match child.stdout.as_mut().unwrap().read_to_string(&mut choice) {
-                    Ok(_) => Some(choice),
-                    Err(_) => None,
-                }
-            } else {
-                None
-            }
-        }
-        Err(_) => {
-            eprintln!("failed to run command");
-            None
-        }
     }
 }
 
