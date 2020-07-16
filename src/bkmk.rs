@@ -6,6 +6,9 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 
+// TODO: Add a custom bookmarks file via env var
+// TODO: Add a duplicated URL checker
+
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct Bookmark {
     id: u32,
@@ -27,10 +30,10 @@ enum Error {
 }
 
 fn main() {
-    std::process::exit(app());
+    std::process::exit(run());
 }
 
-fn app() -> i32 {
+fn run() -> i32 {
     use argparse::*;
 
     let options = Opts::parse();
@@ -41,65 +44,18 @@ fn app() -> i32 {
     let path = Path::new(&path_str);
 
     let contents = {
-        let mut file = if path.exists() {
-            // if path is dir
-            if path.is_dir() {
-                eprintln!(
-                    "bookmarks path {} is a directory; could not continue",
-                    path.display()
-                );
+        let mut file = match open_file(path, true) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("failed to create file: {}", e);
                 return 1;
-            } else {
-                match File::open(path) {
-                    Ok(f) => f,
-                    Err(_) => {
-                        eprintln!("failed to open file; aborting");
-                        return 1;
-                    }
-                }
-            }
-        } else {
-            // create path if it doesn't exist
-            eprintln!(
-                "bookmarks path {} doesn't exist; creating it...",
-                path.display()
-            );
-
-            let mut ancestors = path.ancestors();
-            ancestors.next().unwrap();
-            let parent = ancestors.next().unwrap();
-
-            if parent.exists() {
-                if !parent.is_dir() {
-                    eprintln!("parent path {} is not a directory", parent.display());
-                    return 1;
-                }
-            } else {
-                if let Err(_) = std::fs::create_dir(parent) {
-                    eprintln!("failed to create dir {}; aborting", parent.display());
-                    return 1;
-                };
-            }
-
-            match File::create(path) {
-                Ok(_) => match File::open(path) {
-                    Ok(f) => f,
-                    Err(_) => {
-                        eprintln!("failed to open file; aborting");
-                        return 1;
-                    }
-                },
-                Err(_) => {
-                    eprintln!("failed to create file; aborting");
-                    return 1;
-                }
             }
         };
 
         // read contents of the file
         let mut contents = String::new();
         if let Err(_) = file.read_to_string(&mut contents) {
-            eprintln!("failed to read file; aborting");
+            eprintln!("failed to read file buffer");
             return 1;
         } else {
             contents
@@ -125,6 +81,7 @@ fn app() -> i32 {
 
     let code: i32 = match options.subcmd {
         SubCmd::Add(s) => manager.subcmd_add(&s.url),
+        SubCmd::AddFromFile(s) => manager.subcmd_addfromfile(&s.file),
         SubCmd::Menu => manager.subcmd_menu(),
     };
 
@@ -136,6 +93,46 @@ fn app() -> i32 {
     }
 
     code
+}
+
+fn open_file(path: &Path, create_if_needed: bool) -> Result<File, String> {
+    if path.exists() {
+        if path.is_dir() {
+            Err("path is a directory".into())
+        } else {
+            match File::open(path) {
+                Ok(f) => Ok(f),
+                Err(e) => Err(format!("{}", e)),
+            }
+        }
+    } else {
+        if create_if_needed {
+        if let Some(parent) = path.parent() {
+            if parent.exists() {
+                if parent.is_file() {
+                    return Err(format!(
+                        "parent path {} is not a directory",
+                        parent.display()
+                    ));
+                }
+            } else {
+                if let Err(e) = std::fs::create_dir(parent) {
+                    return Err(format!("failed to create parent path {}: {}", parent.display(), e));
+                }
+            }
+        }
+
+        match File::create(path) {
+            Ok(_) => match File::open(path) {
+                Ok(f) => Ok(f),
+                Err(e) => Err(format!("{}", e)),
+            },
+            Err(e) => Err(format!("failed to create file: {}", e)),
+        }
+        } else {
+            Err("file does not exist".into())
+        }
+    }
 }
 
 mod argparse {
@@ -157,12 +154,20 @@ mod argparse {
     pub enum SubCmd {
         #[clap(about = "adds an URL to the bookmarks list")]
         Add(Add),
+        #[clap(about = "adds the URLs from a newline-delimited bookmarks list file")]
+        AddFromFile(AddFromFile),
+        #[clap(about = "opens an interactive menu for managing bookmarks using fzagnostic")]
         Menu,
     }
 
     #[derive(Clap)]
     pub struct Add {
         pub url: String,
+    }
+
+    #[derive(Clap)]
+    pub struct AddFromFile {
+        pub file: String,
     }
 }
 
@@ -214,16 +219,17 @@ fn get_webpage_title(url: &str) -> Result<String, String> {
                 vec.extend_from_slice(data);
                 Ok(data.len())
             })
-            .unwrap();
-        transfer.perform().unwrap();
+        .unwrap();
+
+        let _ = transfer.perform();
     }
 
     // parse the HTTP response code
     let c = easy.response_code().unwrap();
     match c {
-        300..=399 => return Err(format!("Redirection code {}", c)),
-        400..=499 => return Err(format!("Client error {}", c)),
-        500..=599 => return Err(format!("Server error {}", c)),
+        300..=399 => return Err(format!("got redirection code {}", c)),
+        400..=499 => return Err(format!("got client error code {}", c)),
+        500..=599 => return Err(format!("got server error code {}", c)),
         _ => (),
     }
 
@@ -295,41 +301,48 @@ impl BookmarkManager {
     }
 
     pub fn subcmd_add(&mut self, url: &str) -> i32 {
-        let title = match get_webpage_title(url) {
-            Ok(t) => t,
+        if self.add_bookmark_from_url(url).is_ok() {
+            0
+        } else {
+            1
+        }
+    }
+
+    pub fn subcmd_addfromfile(&mut self, file: &str) -> i32 {
+        let path = Path::new(file);
+        let mut file = match open_file(path, false) {
+            Ok(f) => f,
             Err(e) => {
-                eprintln!("Failed to get title: {}", e);
-                eprint!("New title: ");
-                io::stdout().flush().expect("failed to flush stdout");
-
-                let mut buffer = String::new();
-                io::stdin()
-                    .read_line(&mut buffer)
-                    .expect("failed to read line");
-
-                buffer
+                eprintln!("failed to open file: {}", e);
+                return 1;
             }
-        }.trim().to_string();
-
-        let bookmark = Bookmark {
-            id: {
-                let max = self.used_ids.iter().fold(0, |total, item| total.max(*item));
-                if self.used_ids.contains(&max) {
-                    max + 1
-                } else {
-                    max
-                }
-            },
-            archived: false,
-            name: title,
-            url: url.to_string(),
-            tags: Vec::new(),
         };
 
-        self.bookmarks.push(bookmark);
-        self.modified = true;
+        let mut contents = String::new();
+        if let Err(_) = file.read_to_string(&mut contents) {
+            eprintln!("failed to read file buffer");
+            return 1;
+        }
 
-        0
+        let mut len: usize = 0;
+        let mut successful: usize = 0;
+        for line in contents.split("\n") {
+            if line.trim().len() != 0 {
+                len += 1;
+                if self.add_bookmark_from_url(line).is_ok() {
+                    successful += 1;
+                }
+            }
+        }
+
+        eprintln!("added {} bookmarks out of {} urls", successful, len);
+
+        // exit gracefully if at least one bookmark was written
+        if successful != 0 {
+            0
+        } else {
+            1
+        }
     }
 
     pub fn subcmd_menu(&mut self) -> i32 {
@@ -426,6 +439,67 @@ impl BookmarkManager {
             Ok(_) => Ok(()),
             Err(_) => Err(()),
         }
+    }
+
+    /// Returns a bool indicating whether the operation was successful
+    fn add_bookmark_from_url(&mut self, url: &str) -> Result<(), u32> {
+        let title = match get_webpage_title(url) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("Failed to get title: {}", e);
+                eprintln!("Url: {:?}", url);
+                eprint!("Type a new title: ");
+                io::stdout().flush().expect("failed to flush stdout");
+
+                let mut buffer = String::new();
+                io::stdin()
+                    .read_line(&mut buffer)
+                    .expect("failed to read line");
+
+                buffer
+            }
+        }
+        .trim()
+        .to_string();
+
+        let bkfmt = format!("{{ url = {:?}, name = {:?} }}", url, title);
+        let result = self.add_bookmark(title, url.into(), Vec::new());
+        if result.is_ok() {
+            eprintln!("added bookmark {}", bkfmt);
+            self.modified = true;
+        } else {
+            eprintln!("failed to add bookmark {} (repeated URL)", bkfmt);
+        }
+
+        result
+    }
+
+    /// Returns a bool indicating whether the operation was successful
+    fn add_bookmark(&mut self, name: String, url: String, tags: Vec<String>) -> Result<(), u32> {
+        for bookmark in &self.bookmarks {
+            if bookmark.url == url {
+                return Err(bookmark.id);
+            }
+        }
+
+        let id: u32 = {
+            let max = self.used_ids.iter().fold(0, |total, item| total.max(*item));
+            if self.used_ids.contains(&max) {
+                max + 1
+            } else {
+                max
+            }
+        };
+        self.bookmarks.push(Bookmark {
+            id,
+            archived: false,
+            name,
+            url,
+            tags,
+        });
+        self.used_ids.insert(id);
+
+        Ok(())
     }
 }
 
