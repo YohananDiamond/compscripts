@@ -1,10 +1,10 @@
 use clap::Clap;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
-use std::cmp::Ordering;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct Bookmark {
@@ -15,9 +15,9 @@ struct Bookmark {
     tags: Vec<String>,
 }
 
-struct BookmarkManager<'a> {
+struct BookmarkManager {
     pub bookmarks: Vec<Bookmark>,
-    path: &'a Path,
+    pub modified: bool,
     used_ids: HashSet<u32>,
 }
 
@@ -106,7 +106,7 @@ fn app() -> i32 {
         }
     };
 
-    let mut manager = match BookmarkManager::from_json_lines(&contents, &path) {
+    let mut manager = match BookmarkManager::from_json_lines(&contents) {
         Ok(m) => m,
         Err(e) => match e {
             Error::JsonError(e) => {
@@ -123,11 +123,19 @@ fn app() -> i32 {
         },
     };
 
-    return match options.subcmd {
-        // SubCmd::Add(url) => manager.subcmd_add(url),
+    let code: i32 = match options.subcmd {
+        SubCmd::Add(s) => manager.subcmd_add(&s.url),
         SubCmd::Menu => manager.subcmd_menu(),
-        _ => 99,
     };
+
+    if manager.modified {
+        if let Err(_) = manager.save_to_file(&path) {
+            eprintln!("failed to save to file");
+            return 1;
+        }
+    }
+
+    code
 }
 
 mod argparse {
@@ -186,8 +194,72 @@ fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
     }
 }
 
-impl BookmarkManager<'_> {
-    pub fn from_json_lines<'a>(lines: &str, path: &'a Path) -> Result<BookmarkManager<'a>, Error> {
+fn get_webpage_title(url: &str) -> Result<String, String> {
+    use select::document::Document;
+    use select::node::Data;
+    use select::predicate::Name;
+
+    use curl::easy::Easy;
+    // use std::io::stdout;
+    // use std::io::Write;
+
+    let mut vec = Vec::new();
+    let mut easy = Easy::new();
+    easy.url(url).expect("failed to set url");
+
+    {
+        let mut transfer = easy.transfer();
+        transfer
+            .write_function(|data| {
+                vec.extend_from_slice(data);
+                Ok(data.len())
+            })
+            .unwrap();
+        transfer.perform().unwrap();
+    }
+
+    // parse the HTTP response code
+    let c = easy.response_code().unwrap();
+    match c {
+        300..=399 => return Err(format!("Redirection code {}", c)),
+        400..=499 => return Err(format!("Client error {}", c)),
+        500..=599 => return Err(format!("Server error {}", c)),
+        _ => (),
+    }
+
+    // convert vec to string
+    let string: String = String::from_utf8_lossy(&vec).to_string();
+
+    let document = match Document::from_read(string.as_bytes()) {
+        Ok(doc) => doc,
+        Err(err) => return Err(format!("IO Error: {}", err)),
+    };
+
+    let titles = document.find(Name("title")).collect::<Vec<_>>();
+
+    if titles.len() == 0 {
+        Err(String::from("Couldn't find any <title> tags in page"))
+    } else {
+        // get the first title tag, ignore the rest
+        let children = titles[0]
+            .children()
+            .filter(|x| match x.data() {
+                Data::Text(_) => true,
+                _ => false,
+            })
+            .collect::<Vec<_>>();
+
+        if children.len() == 0 {
+            Err(String::from("Empty <title> tag found"))
+        } else {
+            // there's no unwrap here, so I guess I need to use this syntax.
+            Ok(String::from(children[0].as_text().unwrap()))
+        }
+    }
+}
+
+impl BookmarkManager {
+    pub fn from_json_lines(lines: &str) -> Result<BookmarkManager, Error> {
         let mut used_ids: HashSet<u32> = HashSet::new();
 
         // get IDs for bookmarks
@@ -217,12 +289,49 @@ impl BookmarkManager<'_> {
 
         Ok(BookmarkManager {
             bookmarks,
-            path,
             used_ids,
+            modified: false,
         })
     }
 
-    // pub fn subcmd_add(&mut self, url: &str) -> i32;
+    pub fn subcmd_add(&mut self, url: &str) -> i32 {
+        let title = match get_webpage_title(url) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("Failed to get title: {}", e);
+                eprint!("New title: ");
+                io::stdout().flush().expect("failed to flush stdout");
+
+                let mut buffer = String::new();
+                io::stdin()
+                    .read_line(&mut buffer)
+                    .expect("failed to read line");
+
+                buffer
+            }
+        }.trim().to_string();
+
+        let bookmark = Bookmark {
+            id: {
+                let max = self.used_ids.iter().fold(0, |total, item| total.max(*item));
+                if self.used_ids.contains(&max) {
+                    max + 1
+                } else {
+                    max
+                }
+            },
+            archived: false,
+            name: title,
+            url: url.to_string(),
+            tags: Vec::new(),
+        };
+
+        self.bookmarks.push(bookmark);
+        self.modified = true;
+
+        0
+    }
+
     pub fn subcmd_menu(&mut self) -> i32 {
         let non_archived: Vec<(usize, &Bookmark)> = self
             .bookmarks
@@ -298,19 +407,14 @@ impl BookmarkManager<'_> {
                     .find(|b| b.id == chosen_bookmark_id)
                     .unwrap()
                     .archived = true;
-                match self.save_to_file() {
-                    Ok(()) => 0,
-                    Err(()) => {
-                        println!("failed to save to file");
-                        1
-                    }
-                }
+                self.modified = true;
+                0
             }
             _ => panic!("invalid code"),
         }
     }
 
-    pub fn save_to_file(&mut self) -> Result<(), ()> {
+    pub fn save_to_file(&mut self, file: &Path) -> Result<(), ()> {
         self.bookmarks.sort();
         let compiled_string = self
             .bookmarks
@@ -318,7 +422,7 @@ impl BookmarkManager<'_> {
             .map(|x| serde_json::to_string(x).unwrap())
             .collect::<Vec<String>>()
             .join("\n");
-        match std::fs::write(self.path, &compiled_string) {
+        match std::fs::write(file, &compiled_string) {
             Ok(_) => Ok(()),
             Err(_) => Err(()),
         }
