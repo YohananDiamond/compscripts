@@ -18,3 +18,7 @@ lto = true
 [[bin]]
 name = "bkmk"
 path = "src/bkmk.rs"
+
+[[bin]]
+name = "tkmn"
+path = "src/tkmn.rs"
