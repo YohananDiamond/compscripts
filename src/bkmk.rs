@@ -29,11 +29,7 @@ enum Error {
     RepeatedID(u32),
 }
 
-fn main() {
-    std::process::exit(run());
-}
-
-fn run() -> i32 {
+fn main_() -> i32 {
     use argparse::*;
 
     let options = Opts::parse();
@@ -493,3 +489,5 @@ impl PartialOrd for Bookmark {
         Some(self.cmp(other))
     }
 }
+
+fn main() { std::process::exit(main_()); }
