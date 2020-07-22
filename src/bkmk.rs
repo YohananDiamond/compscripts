@@ -1,5 +1,3 @@
-pub mod lib;
-
 use clap::Clap;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -8,6 +6,8 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use lib::fzagnostic;
+
+pub mod lib;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct Bookmark {
@@ -29,7 +29,7 @@ enum Error {
     RepeatedID(u32),
 }
 
-fn main_() -> i32 {
+fn start_main() -> i32 {
     use argparse::*;
 
     let options = Opts::parse();
@@ -53,11 +53,11 @@ fn main_() -> i32 {
 
         // read contents of the file
         let mut contents = String::new();
-        if let Err(_) = file.read_to_string(&mut contents) {
-            eprintln!("failed to read file buffer");
-            return 1;
-        } else {
+        if file.read_to_string(&mut contents).is_ok() {
             contents
+        } else {
+            eprintln!("Failed to read file buffer");
+            return 1;
         }
     };
 
@@ -85,7 +85,7 @@ fn main_() -> i32 {
     };
 
     if manager.modified {
-        if let Err(_) = manager.save_to_file(&path) {
+        if manager.save_to_file(&path).is_err() {
             eprintln!("failed to save to file");
             return 1;
         }
@@ -200,11 +200,11 @@ fn get_webpage_title(url: &str) -> Result<String, String> {
     }
 
     // parse the HTTP response code
-    let c = easy.response_code().unwrap();
-    match c {
-        300..=399 => return Err(format!("got redirection code {}", c)),
-        400..=499 => return Err(format!("got client error code {}", c)),
-        500..=599 => return Err(format!("got server error code {}", c)),
+    let response_code = easy.response_code().unwrap();
+    match response_code {
+        300..=399 => return Err(format!("got redirection code {}", response_code)),
+        400..=499 => return Err(format!("got client error code {}", response_code)),
+        500..=599 => return Err(format!("got server error code {}", response_code)),
         _ => (),
     }
 
@@ -490,4 +490,4 @@ impl PartialOrd for Bookmark {
     }
 }
 
-fn main() { std::process::exit(main_()); }
+fn main() { std::process::exit(start_main()); }
