@@ -33,14 +33,14 @@ fn main_() -> i32 {
     use argparse::*;
 
     let options = Opts::parse();
-    let path_str = match options.path {
+    let path_string = match options.path {
         Some(cfg) => cfg,
         None => std::env::var("BKMK_FILE").unwrap_or(format!(
             "{}/.local/share/bkmk",
             std::env::var("HOME").unwrap()
         )),
     };
-    let path = Path::new(&path_str);
+    let path = Path::new(&path_string);
 
     let contents = {
         let mut file = match open_file(path, true) {
