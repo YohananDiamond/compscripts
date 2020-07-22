@@ -1,4 +1,4 @@
-mod lib;
+pub mod lib;
 
 use clap::Clap;
 use serde::{Deserialize, Serialize};
@@ -441,13 +441,13 @@ impl BookmarkManager {
         .trim()
         .to_string();
 
-        let bkfmt = format!("{{ url = {:?}, name = {:?} }}", url, title);
+        let bkfmt = format!("@bookmark[url: {:?}, name: {:?}]", url, title);
         let result = self.add_bookmark(title, url.into(), Vec::new());
         if result.is_ok() {
-            eprintln!("added bookmark {}", bkfmt);
+            eprintln!("added {}", bkfmt);
             self.modified = true;
         } else {
-            eprintln!("failed to add bookmark {} (repeated URL)", bkfmt);
+            eprintln!("failed to add {} (repeated URL)", bkfmt);
         }
 
         result
