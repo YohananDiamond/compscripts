@@ -2,10 +2,9 @@ use clap::Clap;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::Path;
-use lib::fzagnostic;
+use lib::{fzagnostic, touch_and_open};
 
 pub mod lib;
 
@@ -43,7 +42,7 @@ fn start_main() -> i32 {
     let path = Path::new(&path_string);
 
     let contents = {
-        let mut file = match open_file(path, true) {
+        let mut file = match touch_and_open(path) {
             Ok(f) => f,
             Err(e) => {
                 eprintln!("failed to create file: {}", e);
@@ -92,50 +91,6 @@ fn start_main() -> i32 {
     }
 
     code
-}
-
-fn open_file(path: &Path, create_if_needed: bool) -> Result<File, String> {
-    if path.exists() {
-        if path.is_dir() {
-            Err("path is a directory".into())
-        } else {
-            match File::open(path) {
-                Ok(f) => Ok(f),
-                Err(e) => Err(format!("{}", e)),
-            }
-        }
-    } else {
-        if create_if_needed {
-            if let Some(parent) = path.parent() {
-                if parent.exists() {
-                    if parent.is_file() {
-                        return Err(format!(
-                            "parent path {} is not a directory",
-                            parent.display()
-                        ));
-                    }
-                } else {
-                    if let Err(e) = std::fs::create_dir(parent) {
-                        return Err(format!(
-                            "failed to create parent path {}: {}",
-                            parent.display(),
-                            e
-                        ));
-                    }
-                }
-            }
-
-            match File::create(path) {
-                Ok(_) => match File::open(path) {
-                    Ok(f) => Ok(f),
-                    Err(e) => Err(format!("{}", e)),
-                },
-                Err(e) => Err(format!("failed to create file: {}", e)),
-            }
-        } else {
-            Err("file does not exist".into())
-        }
-    }
 }
 
 mod argparse {
@@ -285,7 +240,7 @@ impl BookmarkManager {
 
     pub fn subcmd_addfromfile(&mut self, file: &str) -> i32 {
         let path = Path::new(file);
-        let mut file = match open_file(path, false) {
+        let mut file = match touch_and_open(path) {
             Ok(f) => f,
             Err(e) => {
                 eprintln!("failed to open file: {}", e);

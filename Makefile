@@ -3,10 +3,11 @@ DESTDIR := ~/.local/bin
 
 output: $(DEPS)
 	cargo build --bin bkmk --release
+	cargo build --bin tkmn --release
 
 install: output
 	@echo Installing to $(DESTDIR)...
-	cp target/release/bkmk -t $(DESTDIR)
+	cd target/release && cp bkmk tkmn -t $(DESTDIR)
 
 run:
 	@echo 'The "run" action is disabled here, since multiple binaries are being made.'
