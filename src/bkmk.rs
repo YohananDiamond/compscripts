@@ -1,12 +1,21 @@
 use clap::Clap;
+use curl::easy::Easy;
+use select::document::Document;
+use select::node::Data;
+use select::predicate::Name;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::{self, Read, Write};
 use std::path::Path;
-use lib::{fzagnostic, touch_and_open};
 
-pub mod lib;
+mod lib;
+use lib::functions::{find_free_value, fzagnostic, touch_and_open, touch_read};
+use lib::traits::{DataManager, JsonLines};
+
+fn main() {
+    std::process::exit(BookmarkManager::start());
+}
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 struct Bookmark {
@@ -17,216 +26,136 @@ struct Bookmark {
     tags: Vec<String>,
 }
 
+impl Ord for Bookmark {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl PartialOrd for Bookmark {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 struct BookmarkManager {
-    pub bookmarks: Vec<Bookmark>,
-    pub modified: bool,
+    data: Vec<Bookmark>,
+    modified: bool,
     used_ids: HashSet<u32>,
 }
 
-enum Error {
-    JsonError(serde_json::error::Error),
-    RepeatedID(u32),
-}
+impl<'a> JsonLines<'a> for BookmarkManager {}
 
-fn start_main() -> i32 {
-    use argparse::*;
+impl DataManager for BookmarkManager {
+    type Data = Bookmark;
 
-    let options = Opts::parse();
-    let path_string = match options.path {
-        Some(cfg) => cfg,
-        None => std::env::var("BKMK_FILE").unwrap_or(format!(
-            "{}/.local/share/bkmk",
-            std::env::var("HOME").unwrap()
-        )),
-    };
-    let path = Path::new(&path_string);
+    fn start() -> i32 {
+        #[derive(Clap)]
+        struct Opts {
+            #[clap(
+                short,
+                long,
+                about = "the path to the bookmarks file (default: $BKMK_FILE -> ~/.local/share/bkmk)"
+            )]
+            pub path: Option<String>,
+            #[clap(subcommand)]
+            pub subcmd: SubCmd,
+        }
 
-    let contents = {
-        let mut file = match touch_and_open(path) {
-            Ok(f) => f,
+        #[derive(Clap)]
+        enum SubCmd {
+            #[clap(about = "adds an URL to the bookmarks list")]
+            Add(Add),
+            #[clap(about = "adds the URLs from a newline-delimited bookmarks list file")]
+            AddFromFile(AddFromFile),
+            #[clap(about = "opens an interactive menu for managing bookmarks using fzagnostic")]
+            Menu,
+        }
+
+        #[derive(Clap)]
+        struct Add {
+            pub url: String,
+        }
+
+        #[derive(Clap)]
+        struct AddFromFile {
+            pub file: String,
+        }
+
+        let options = Opts::parse();
+        let path_string = match options.path {
+            Some(cfg) => cfg,
+            None => std::env::var("BKMK_FILE").unwrap_or(format!(
+                "{}/.local/share/bkmk",
+                std::env::var("HOME").unwrap()
+            )),
+        };
+        let path = Path::new(&path_string);
+        let contents = match touch_read(&path) {
+            Ok(c) => c,
             Err(e) => {
-                eprintln!("failed to create file: {}", e);
+                eprintln!("Failed to load bookmarks file: {}", e);
                 return 1;
             }
         };
 
-        // read contents of the file
-        let mut contents = String::new();
-        if file.read_to_string(&mut contents).is_ok() {
-            contents
-        } else {
-            eprintln!("Failed to read file buffer");
-            return 1;
-        }
-    };
-
-    let mut manager = match BookmarkManager::from_json_lines(&contents) {
-        Ok(m) => m,
-        Err(e) => match e {
-            Error::JsonError(e) => {
-                eprintln!("failed to parse bookmarks file: {}", e);
+        let data: Vec<Bookmark> = match Self::from_json_lines(&contents) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Failed to parse bookmarks file: {}", e);
                 return 1;
             }
-            Error::RepeatedID(id) => {
-                eprintln!(
-                    "repeated ID {} in bookmarks file; this will have to be fixed manually",
-                    id
-                );
+        };
+
+        let mut manager = match BookmarkManager::new(data) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Failed to set up bookmarks: {}", e);
                 return 1;
             }
-        },
-    };
+        };
 
-    let code: i32 = match options.subcmd {
-        SubCmd::Add(s) => manager.subcmd_add(&s.url),
-        SubCmd::AddFromFile(s) => manager.subcmd_addfromfile(&s.file),
-        SubCmd::Menu => manager.subcmd_menu(),
-    };
+        let code: i32 = match options.subcmd {
+            SubCmd::Add(s) => manager.subcmd_add(&s.url),
+            SubCmd::AddFromFile(s) => manager.subcmd_addfromfile(&s.file),
+            SubCmd::Menu => manager.subcmd_menu(),
+        };
 
-    if manager.modified {
-        if manager.save_to_file(&path).is_err() {
-            eprintln!("failed to save to file");
-            return 1;
+        if manager.modified {
+            if let Err(e) = manager.save_to_file(&path) {
+                eprintln!("Failed to save to file: {}", e);
+                return 1;
+            }
         }
+
+        code
     }
 
-    code
-}
-
-mod argparse {
-    use super::*;
-
-    #[derive(Clap)]
-    pub struct Opts {
-        #[clap(
-            short,
-            long,
-            about = "the path to the bookmarks file (default: $BKMK_FILE -> ~/.local/share/bkmk)"
-        )]
-        pub path: Option<String>,
-        #[clap(subcommand)]
-        pub subcmd: SubCmd,
+    fn data_mut(&mut self) -> &mut Vec<Self::Data> {
+        &mut self.data
     }
 
-    #[derive(Clap)]
-    pub enum SubCmd {
-        #[clap(about = "adds an URL to the bookmarks list")]
-        Add(Add),
-        #[clap(about = "adds the URLs from a newline-delimited bookmarks list file")]
-        AddFromFile(AddFromFile),
-        #[clap(about = "opens an interactive menu for managing bookmarks using fzagnostic")]
-        Menu,
-    }
-
-    #[derive(Clap)]
-    pub struct Add {
-        pub url: String,
-    }
-
-    #[derive(Clap)]
-    pub struct AddFromFile {
-        pub file: String,
-    }
-}
-
-fn get_webpage_title(url: &str) -> Result<String, String> {
-    use select::document::Document;
-    use select::node::Data;
-    use select::predicate::Name;
-
-    use curl::easy::Easy;
-    // use std::io::stdout;
-    // use std::io::Write;
-
-    let mut vec = Vec::new();
-    let mut easy = Easy::new();
-    easy.url(url).expect("failed to set url");
-
-    {
-        let mut transfer = easy.transfer();
-        transfer
-            .write_function(|data| {
-                vec.extend_from_slice(data);
-                Ok(data.len())
-            })
-            .unwrap();
-
-        let _ = transfer.perform();
-    }
-
-    // parse the HTTP response code
-    let response_code = easy.response_code().unwrap();
-    match response_code {
-        300..=399 => return Err(format!("got redirection code {}", response_code)),
-        400..=499 => return Err(format!("got client error code {}", response_code)),
-        500..=599 => return Err(format!("got server error code {}", response_code)),
-        _ => (),
-    }
-
-    // convert vec to string
-    let string: String = String::from_utf8_lossy(&vec).to_string();
-
-    let document = match Document::from_read(string.as_bytes()) {
-        Ok(doc) => doc,
-        Err(err) => return Err(format!("IO Error: {}", err)),
-    };
-
-    let titles = document.find(Name("title")).collect::<Vec<_>>();
-
-    if titles.len() == 0 {
-        Err(String::from("Couldn't find any <title> tags in page"))
-    } else {
-        // get the first title tag, ignore the rest
-        let children = titles[0]
-            .children()
-            .filter(|x| match x.data() {
-                Data::Text(_) => true,
-                _ => false,
-            })
-            .collect::<Vec<_>>();
-
-        if children.len() == 0 {
-            Err(String::from("Empty <title> tag found"))
-        } else {
-            // there's no unwrap here, so I guess I need to use this syntax.
-            Ok(String::from(children[0].as_text().unwrap()))
-        }
+    fn data(&self) -> &Vec<Self::Data> {
+        &self.data
     }
 }
 
 impl BookmarkManager {
-    pub fn from_json_lines(lines: &str) -> Result<BookmarkManager, Error> {
+    fn new(data: Vec<Bookmark>) -> Result<Self, String> {
         let mut used_ids: HashSet<u32> = HashSet::new();
 
-        // get IDs for bookmarks
-        let bookmarks: Vec<Bookmark> = match lines
-            .split("\n")
-            .filter_map(|line| {
-                if line.len() == 0 {
-                    None
-                } else {
-                    Some(serde_json::from_str(line))
-                }
-            })
-            .collect::<Result<Vec<Bookmark>, serde_json::error::Error>>()
-        {
-            Ok(v) => v,
-            Err(e) => return Err(Error::JsonError(e)),
-        };
-
-        // check for repeated IDs
-        for bookmark in bookmarks.iter() {
+        for bookmark in data.iter() {
             if used_ids.contains(&bookmark.id) {
-                return Err(Error::RepeatedID(bookmark.id));
+                return Err(format!("repeated ID: {}", bookmark.id));
             } else {
                 used_ids.insert(bookmark.id);
             }
         }
 
         Ok(BookmarkManager {
-            bookmarks,
-            used_ids,
+            data: data,
             modified: false,
+            used_ids: used_ids,
         })
     }
 
@@ -277,7 +206,7 @@ impl BookmarkManager {
 
     pub fn subcmd_menu(&mut self) -> i32 {
         let non_archived: Vec<(usize, &Bookmark)> = self
-            .bookmarks
+            .data()
             .iter()
             .filter(|b| !b.archived)
             .enumerate()
@@ -329,7 +258,7 @@ impl BookmarkManager {
                     std::env::var("OPENER").unwrap_or("xdg-opener".into()),
                 )
                 .args(&[self
-                    .bookmarks
+                    .data()
                     .iter()
                     .find(|b| b.id == chosen_bookmark_id)
                     .unwrap()
@@ -345,7 +274,7 @@ impl BookmarkManager {
                 }
             }
             1 => {
-                self.bookmarks
+                self.data_mut()
                     .iter_mut()
                     .find(|b| b.id == chosen_bookmark_id)
                     .unwrap()
@@ -357,23 +286,9 @@ impl BookmarkManager {
         }
     }
 
-    pub fn save_to_file(&mut self, file: &Path) -> Result<(), ()> {
-        self.bookmarks.sort();
-        let compiled_string = self
-            .bookmarks
-            .iter()
-            .map(|x| serde_json::to_string(x).unwrap())
-            .collect::<Vec<String>>()
-            .join("\n");
-        match std::fs::write(file, &compiled_string) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(()),
-        }
-    }
-
     /// Returns a bool indicating whether the operation was successful
     fn add_bookmark_from_url(&mut self, url: &str) -> Result<(), u32> {
-        let title = match get_webpage_title(url) {
+        let title = match url_get_title(url) {
             Ok(t) => t,
             Err(e) => {
                 eprintln!("Failed to get title: {}", e);
@@ -393,7 +308,13 @@ impl BookmarkManager {
         .to_string();
 
         let bkfmt = format!("@bookmark[url: {:?}, name: {:?}]", url, title);
-        let result = self.add_bookmark(title, url.into(), Vec::new());
+        let result = self.add_bookmark(Bookmark {
+            id: 0,
+            archived: false,
+            name: title,
+            url: url.into(),
+            tags: Vec::new(),
+        });
         if result.is_ok() {
             eprintln!("added {}", bkfmt);
             self.modified = true;
@@ -404,45 +325,72 @@ impl BookmarkManager {
         result
     }
 
-    /// Returns a bool indicating whether the operation was successful
-    fn add_bookmark(&mut self, name: String, url: String, tags: Vec<String>) -> Result<(), u32> {
-        for bookmark in &self.bookmarks {
-            if bookmark.url == url {
+    /// Note: the `id` field in `bookmark` is ignored.
+    fn add_bookmark(&mut self, bookmark: Bookmark) -> Result<(), u32> {
+        for bookmark in self.data() {
+            if bookmark.url == bookmark.url {
                 return Err(bookmark.id);
             }
         }
 
-        let id: u32 = {
-            let max = self.used_ids.iter().fold(0, |total, item| total.max(*item));
-            if self.used_ids.contains(&max) {
-                max + 1
-            } else {
-                max
-            }
-        };
-        self.bookmarks.push(Bookmark {
-            id,
-            archived: false,
-            name,
-            url,
-            tags,
-        });
+        let id = find_free_value(&self.used_ids);
+        self.data_mut().push(Bookmark { id: id, archived: false, ..bookmark });
         self.used_ids.insert(id);
 
         Ok(())
     }
 }
 
-impl Ord for Bookmark {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
+fn url_get_title(url: &str) -> Result<String, String> {
+    let mut vec = Vec::new();
+    let mut easy = Easy::new();
+    easy.url(url).expect("failed to set url");
+
+    {
+        let mut transfer = easy.transfer();
+        transfer
+            .write_function(|data| {
+                vec.extend_from_slice(data);
+                Ok(data.len())
+            })
+            .unwrap();
+
+        let _ = transfer.perform();
+    }
+
+    // Parse the HTTP response code
+    let response_code = easy.response_code().unwrap();
+    match response_code {
+        300..=399 => return Err(format!("got redirection code {}", response_code)),
+        400..=499 => return Err(format!("got client error code {}", response_code)),
+        500..=599 => return Err(format!("got server error code {}", response_code)),
+        _ => (),
+    }
+
+    let document = match Document::from_read(String::from_utf8_lossy(&vec).as_bytes()) {
+        Ok(doc) => doc,
+        Err(err) => return Err(format!("IO Error: {}", err)),
+    };
+
+    let titles: Vec<_> = document.find(Name("title")).collect();
+
+    if titles.len() == 0 {
+        Err(String::from("Couldn't find any <title> tags in page"))
+    } else {
+        // get the first title tag, ignore the rest
+        let children = titles[0]
+            .children()
+            .filter(|x| match x.data() {
+                Data::Text(_) => true,
+                _ => false,
+            })
+            .collect::<Vec<_>>();
+
+        if children.len() == 0 {
+            Err(String::from("Empty <title> tag found"))
+        } else {
+            // there's no unwrap here, so I guess I need to use this syntax.
+            Ok(String::from(children[0].as_text().unwrap()))
+        }
     }
 }
-
-impl PartialOrd for Bookmark {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-fn main() { std::process::exit(start_main()); }

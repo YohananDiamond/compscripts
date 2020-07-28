@@ -1,7 +1,8 @@
 use std::fs::{create_dir_all, File, OpenOptions};
-use std::path::Path;
 use std::io::{Read, Write};
-use std::process::{Stdio, Command};
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::collections::HashSet;
 
 pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
     match Command::new("fzagnostic")
@@ -32,7 +33,6 @@ pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
 }
 
 pub fn touch_and_open(path: &Path) -> Result<File, String> {
-
     if path.exists() {
         if path.is_dir() {
             Err("path is a directory".into())
@@ -71,5 +71,31 @@ pub fn touch_and_open(path: &Path) -> Result<File, String> {
             Ok(f) => Ok(f),
             Err(e) => Err(format!("failed to create file: {}", e)),
         }
+    }
+}
+
+pub fn touch_read(path: &Path) -> Result<String, String> {
+    match touch_and_open(path) {
+        Ok(mut f) => {
+            let mut contents = String::new();
+            if let Err(e) = f.read_to_string(&mut contents) {
+                Err(format!("failed to read file buffer: {}", e))
+            } else {
+                Ok(contents)
+            }
+        },
+        Err(e) => {
+            Err(format!("failed to create file: {}", e))
+        }
+    }
+}
+
+pub fn find_free_value(set: &HashSet<u32>) -> u32 {
+    let mut free_value = 0u32;
+    loop {
+        if set.contains(&free_value) {
+            break free_value;
+        }
+        free_value += 1;
     }
 }
