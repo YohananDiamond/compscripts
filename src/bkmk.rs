@@ -10,9 +10,12 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 
 mod lib;
-use lib::array_serialization::*;
-use lib::functions::{find_free_value, fzagnostic, touch_and_open, touch_read};
-use lib::traits::DataManager;
+use lib::{
+    array_serialization::*,
+    functions::{find_free_value, fzagnostic, touch_and_open, touch_read},
+    traits::DataManager,
+    getenv,
+};
 
 fn main() {
     std::process::exit(BookmarkManager::start());
@@ -82,12 +85,11 @@ impl DataManager for BookmarkManager {
         }
 
         let options = Opts::parse();
+
         let path_string = match options.path {
             Some(cfg) => cfg,
-            None => std::env::var("BKMK_FILE").unwrap_or(format!(
-                "{}/.local/share/bkmk",
-                std::env::var("HOME").unwrap()
-            )),
+            None => getenv("BKMK_FILE")
+                .unwrap_or(format!("{}/.local/share/bkmk", getenv("HOME").unwrap())),
         };
         let path = Path::new(&path_string);
         let contents = match touch_read(&path) {

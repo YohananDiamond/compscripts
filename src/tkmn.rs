@@ -1,13 +1,18 @@
 // TODO: make a date struct or something and add {defer dates, creation dates}
 
 mod lib;
-use lib::functions::find_free_value;
-use lib::traits::DataManager;
-use lib::array_serialization::*;
+use clap::Clap;
+use lib::{
+    array_serialization::{ArrayArray, JsonArraySerializer},
+    functions::{find_free_value, touch_read},
+    getenv,
+    traits::DataManager,
+};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use clap::Clap;
+use std::path::Path;
 
 fn main() {
     std::process::exit(TaskManager::start());
@@ -17,7 +22,7 @@ fn main() {
 struct Task {
     id: u32,
     name: String,
-    context: String,
+    context: Option<String>,
     actionable: bool,
     children: Vec<Task>,
 }
@@ -52,26 +57,26 @@ impl DataManager for TaskManager {
                 about = "the path to the tasks file (default: $TKMN_FILE -> ~/.local/share/tkmn)"
             )]
             pub path: Option<String>,
-            #[clap(subcommand)]
-            pub subcmd: SubCmd
+            #[clap(subcommand, about = r#"What to do; defaults to "next""#)]
+            pub subcmd: Option<SubCmd>,
         }
 
         #[derive(Clap, Debug)]
         enum SubCmd {
-            #[clap(about = "adds a task")]
+            #[clap(about = "Add a task")]
             Add(TaskMod),
-            #[clap(about = "selects a task and does something with it")]
+            #[clap(about = "Select a task and do something with it")]
             Sel(SelCmd),
-            #[clap(about = "lists all active tasks in a tree format")]
-            All,
-            #[clap(about = "lists next tasks")]
+            #[clap(about = "List all active tasks in a tree format")]
+            List,
+            #[clap(about = "List next tasks")]
             Next,
             // TODO: search
         }
 
         #[derive(Clap, Debug)]
         struct SelCmd {
-            #[clap(about = "the selection range")]
+            #[clap(about = "The selection range")]
             pub selection: String, // TODO: make a clearer format (X..Y; X,Y; X)
             #[clap(subcommand)]
             pub action: ActionCmd,
@@ -79,75 +84,111 @@ impl DataManager for TaskManager {
 
         #[derive(Clap, Debug)]
         enum ActionCmd {
-            #[clap(about = "shows the matches")]
+            #[clap(about = "List all matches")]
             List,
-            #[clap(about = "adds a subtask; only works if exactly one task is selected")]
+            #[clap(about = "Add a subtask; only works if exactly one task is selected")]
             Sub(TaskMod),
-            #[clap(about = "modifies the task")]
+            #[clap(about = "Modify a task")]
             Mod(TaskMod),
         }
 
         #[derive(Clap, Debug)]
         struct TaskMod {
-            #[clap(about = "the name of the task")]
+            #[clap(about = "The name of the task")]
             name: Option<String>,
-            #[clap(short, long, about = "the context of the task")]
+            #[clap(short, long, about = "The context of the task")]
             context: Option<String>,
-            #[clap(short, long, about = "if the task is a note")]
+            #[clap(short, long, about = "If the task is a note")]
             note: bool,
         }
 
         let options = Opts::parse();
-        eprintln!("{:?}", options);
+        eprintln!("{:?}", options); // TODO: remove this
 
-        // let path_string = match options.path {
-        //     Some(cfg) => cfg,
-        //     None => std::env::var("BKMK_FILE").unwrap_or(format!(
-        //         "{}/.local/share/bkmk",
-        //         std::env::var("HOME").unwrap()
-        //     )),
-        // };
-        // let path = Path::new(&path_string);
-        // let contents = match touch_read(&path) {
-        //     Ok(c) => c,
-        //     Err(e) => {
-        //         eprintln!("Failed to load bookmarks file: {}", e);
-        //         return 1;
-        //     }
-        // };
+        let path_string = match options.path {
+            Some(cfg) => cfg,
+            None => getenv("TKMN_FILE")
+                .unwrap_or(format!("{}/.local/share/tkmn", getenv("HOME").unwrap())),
+        };
+        let path = Path::new(&path_string);
+        let contents = match touch_read(&path) {
+            Ok(c) => {
+                if c.chars()
+                    .filter(|x| match x {
+                        '\n' | ' ' => false,
+                        _ => true,
+                    })
+                    .collect::<String>()
+                    .len()
+                    == 0
+                {
+                    String::from("[]")
+                } else {
+                    c
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to load task file: {}", e);
+                return 1;
+            }
+        };
 
-        // let data: Vec<Bookmark> = match Self::from_json_lines(&contents) {
-        //     Ok(o) => o,
-        //     Err(e) => {
-        //         eprintln!("Failed to parse bookmarks file: {}", e);
-        //         return 1;
-        //     }
-        // };
+        let data: Vec<Task> = match ArrayArray::import(&contents) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Failed to parse task file: {}", e);
+                return 1;
+            }
+        };
 
-        // let mut manager = match BookmarkManager::new(data) {
-        //     Ok(o) => o,
-        //     Err(e) => {
-        //         eprintln!("Failed to set up bookmarks: {}", e);
-        //         return 1;
-        //     }
-        // };
+        let mut manager = match TaskManager::new(data) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Failed to set up bookmarks: {}", e);
+                return 1;
+            }
+        };
 
-        // let code: i32 = match options.subcmd {
-        //     SubCmd::Add(s) => manager.subcmd_add(&s.url),
-        //     SubCmd::AddFromFile(s) => manager.subcmd_addfromfile(&s.file),
-        //     SubCmd::Menu => manager.subcmd_menu(),
-        // };
+        // TODO: ID duplication checking, used_ids and etc.
 
-        // if manager.modified {
-        //     if let Err(e) = manager.save_to_file(&path) {
-        //         eprintln!("Failed to save to file: {}", e);
-        //         return 1;
-        //     }
-        // }
+        let code: i32 = match options.subcmd {
+            Some(SubCmd::Add(s)) => {
+                if let Some(name) = s.name {
+                    match manager.add_task(Task {
+                        id: 0,
+                        name: name,
+                        context: s.context,
+                        actionable: !s.note,
+                        children: Vec::new(),
+                    }) {
+                        Ok(_) => {
+                            eprintln!("Task added.");
+                            0
+                        }
+                        Err(()) => {
+                            eprintln!("Failed to add task.");
+                            1
+                        }
+                    }
+                } else {
+                    eprintln!("The task name needs to be specified.");
+                    return 1;
+                }
+            }
+            // Some(SubCmd::Sel(s)) => manager.subcmd_addfromfile(&s),
+            // Some(SubCmd::List) => manager.subcmd_report(Reports::All),
+            // Some(SubCmd::Next) | None => manager.subcmd_report(Reports::Next),
+            _ => 127,
+        };
 
-        // code
+        if manager.modified {
+            if let Err(e) = ArrayArray::new(&manager.data).save_to_file(&path) {
+                eprintln!("Failed to save to file: {}", e);
+                return 1;
+            }
+        }
 
-        0
+        code
     }
 
     fn data(&self) -> &Vec<Self::Data> {
@@ -164,6 +205,7 @@ impl TaskManager {
         let mut used_ids: HashSet<u32> = HashSet::new();
 
         for task in data.iter() {
+            // TODO: replace this with something more stables (sub-tasks)
             if used_ids.contains(&task.id) {
                 return Err(format!("repeated ID: {}", task.id));
             } else {
@@ -179,11 +221,67 @@ impl TaskManager {
     }
 
     /// Note: the `id` field in `task` is ignored.
-    fn add_task(&mut self, task: Task) -> Result<(), ()> {
+    fn add_task(&mut self, task: Task) -> Result<u32, ()> {
         let id = find_free_value(&self.used_ids);
         self.data_mut().push(Task { id: id, ..task });
+        self.modified = true;
         self.used_ids.insert(id);
 
-        Ok(())
+        Ok(id)
+    }
+}
+
+fn parse_range_str(string: &str) -> Result<Vec<u32>, String> {
+    let mut result: Vec<u32> = Vec::new();
+    let range_regex = Regex::new(r"^(\d+)\.\.(\d+)$").unwrap();
+    let number_regex = Regex::new(r"^\d+$").unwrap();
+
+    for number in string
+        .chars()
+        .filter(|x| *x != ' ')
+        .collect::<String>()
+        .split(",")
+    {
+        if number_regex.is_match(number) {
+            result.push(number.parse::<u32>().unwrap())
+        } else if range_regex.is_match(number) {
+            let captures = range_regex.captures(number).unwrap();
+            let num1: u32 = captures[1].parse().unwrap();
+            let num2: u32 = captures[2].parse().unwrap();
+
+            if num2 < num1 {
+                return Err(format!(
+                    "Second number {} is smaller than first number {} in range {}",
+                    num2, num1, number
+                ));
+            }
+
+            let mut i: u32 = num1;
+            loop {
+                result.push(i);
+                i += 1;
+                if i > num2 {
+                    break;
+                }
+            }
+        } else {
+            return Err(format!("Could not parse {:?}", number));
+        }
+    }
+
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn range() {
+        let range_str = "1..10,4,5";
+        assert_eq!(
+            parse_range_str(range_str),
+            Ok(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 4, 5])
+        );
     }
 }

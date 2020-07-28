@@ -56,14 +56,14 @@ where
     }
 }
 
-pub struct ArrayVec<'a, T>
+pub struct ArrayArray<'a, T>
 where
     T: Deserialize<'a> + Serialize,
 {
     data: &'a [T],
 }
 
-impl<'a, T> ArrayVec<'a, T>
+impl<'a, T> ArrayArray<'a, T>
 where
     T: Deserialize<'a> + Serialize,
 {
@@ -74,7 +74,7 @@ where
     }
 }
 
-impl<'a, T> JsonArraySerializer<'a, T> for ArrayVec<'a, T>
+impl<'a, T> JsonArraySerializer<'a, T> for ArrayArray<'a, T>
 where
     T: Deserialize<'a> + Serialize,
 {
@@ -83,15 +83,6 @@ where
     }
 
     fn import(string: &'a str) -> Result<Vec<T>, JsonError> {
-        string
-            .split("\n")
-            .filter_map(|line| {
-                if line.len() == 0 {
-                    None
-                } else {
-                    Some(serde_json::from_str(line))
-                }
-            })
-            .collect()
+        serde_json::from_str(string)
     }
 }
