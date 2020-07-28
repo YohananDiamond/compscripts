@@ -2,7 +2,8 @@
 
 mod lib;
 use lib::functions::find_free_value;
-use lib::traits::{DataManager, JsonLines};
+use lib::traits::DataManager;
+use lib::array_serialization::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -38,8 +39,6 @@ struct TaskManager {
     modified: bool,
     used_ids: HashSet<u32>,
 }
-
-impl<'a> JsonLines<'a> for TaskManager {}
 
 impl DataManager for TaskManager {
     type Data = Task;

@@ -10,8 +10,9 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 
 mod lib;
+use lib::array_serialization::*;
 use lib::functions::{find_free_value, fzagnostic, touch_and_open, touch_read};
-use lib::traits::{DataManager, JsonLines};
+use lib::traits::DataManager;
 
 fn main() {
     std::process::exit(BookmarkManager::start());
@@ -43,8 +44,6 @@ struct BookmarkManager {
     modified: bool,
     used_ids: HashSet<u32>,
 }
-
-impl<'a> JsonLines<'a> for BookmarkManager {}
 
 impl DataManager for BookmarkManager {
     type Data = Bookmark;
@@ -99,7 +98,7 @@ impl DataManager for BookmarkManager {
             }
         };
 
-        let data: Vec<Bookmark> = match Self::from_json_lines(&contents) {
+        let data: Vec<Bookmark> = match ArrayLines::import(&contents) {
             Ok(o) => o,
             Err(e) => {
                 eprintln!("Failed to parse bookmarks file: {}", e);
@@ -122,7 +121,7 @@ impl DataManager for BookmarkManager {
         };
 
         if manager.modified {
-            if let Err(e) = manager.save_to_file(&path) {
+            if let Err(e) = ArrayLines::new(&manager.data).save_to_file(&path) {
                 eprintln!("Failed to save to file: {}", e);
                 return 1;
             }
@@ -327,14 +326,18 @@ impl BookmarkManager {
 
     /// Note: the `id` field in `bookmark` is ignored.
     fn add_bookmark(&mut self, bookmark: Bookmark) -> Result<(), u32> {
-        for bookmark in self.data() {
-            if bookmark.url == bookmark.url {
-                return Err(bookmark.id);
+        for b in self.data() {
+            if b.url == bookmark.url {
+                return Err(b.id);
             }
         }
 
         let id = find_free_value(&self.used_ids);
-        self.data_mut().push(Bookmark { id: id, archived: false, ..bookmark });
+        self.data_mut().push(Bookmark {
+            id: id,
+            archived: false,
+            ..bookmark
+        });
         self.used_ids.insert(id);
 
         Ok(())
