@@ -1,5 +1,6 @@
 // TODO: add a date struct - needed for defer dates and creation dates.
 // TODO: pseudo-IDs
+// TODO: make task_interact a little bit more clearer
 
 mod lib;
 use clap::Clap;
@@ -182,7 +183,11 @@ impl DataManager for TaskManager {
                         id: 0,
                         name: name,
                         context: s.context,
-                        state: if s.note.unwrap_or(false) { None } else { Some(false) },
+                        state: if s.note.unwrap_or(false) {
+                            None
+                        } else {
+                            Some(false)
+                        },
                         children: Vec::new(),
                     }) {
                         Ok(_) => {
@@ -230,20 +235,25 @@ impl DataManager for TaskManager {
                                     // https://github.com/rust-lang/rfcs/issues/961#issuecomment-264699920https://github.com/rust-lang/rfcs/issues/961#issuecomment-264699920
                                     'range: loop {
                                         for id in range {
-                                            if manager.task_interact::<_, bool>(id, |t| t.state.is_none()).unwrap() {
+                                            if manager
+                                                .task_interact::<_, bool>(id, |t| t.state.is_none())
+                                                .unwrap()
+                                            {
                                                 eprintln!("Item @[ID:{}] is a note and cannot be completed.", id);
-                                                break 'range 1
+                                                break 'range 1;
                                             } else {
-                                                manager.task_interact_mut(id, |t| {
-                                                    t.state = Some(true);
-                                                }).unwrap();
+                                                manager
+                                                    .task_interact_mut(id, |t| {
+                                                        t.state = Some(true);
+                                                    })
+                                                    .unwrap();
                                             }
                                         }
-                                        break 'range 0
+                                        break 'range 0;
                                     }
                                 }
                             }
-                            _ => 127,
+                            _ => unimplemented!(),
                         }
                     }
                 }
@@ -252,9 +262,31 @@ impl DataManager for TaskManager {
                     1
                 }
             },
-            // Some(SubCmd::List) => manager.subcmd_report(Reports::All), // TODO
-            // Some(SubCmd::Next) | None => manager.subcmd_report(Reports::Next), // TODO
-            _ => 127,
+            Some(SubCmd::List) => {
+                let range = manager.get_surface_ids();
+                manager
+                    .show_report("Full surface listing", &range[..])
+                    .unwrap(); // TODO: clarify somewhere what "surface" means
+                0
+            }
+            Some(SubCmd::Next) | None => {
+                // TODO: remake this to be like momentum.earth
+                let range: Vec<u32> = manager
+                    .get_surface_ids()
+                    .iter()
+                    .filter_map(|&id| {
+                        manager
+                            .task_interact::<_, Option<u32>>(id, |t| match t.state {
+                                Some(true) => None,
+                                _ => Some(id),
+                            })
+                            .unwrap()
+                    })
+                    .collect();
+
+                manager.show_report("Next up", &range[..]).unwrap();
+                0
+            }
         };
 
         if manager.modified {
@@ -330,9 +362,12 @@ impl TaskManager {
     pub fn show_report(&self, report_name: &str, ids: &[u32]) -> Result<(), u32> {
         println!("Report: {}", report_name);
         for id in ids {
-            if self.task_interact(*id, |t| {
-                t.print(0);
-            }).is_err() {
+            if self
+                .task_interact(*id, |t| {
+                    t.print(0);
+                })
+                .is_err()
+            {
                 return Err(*id);
             }
         }
@@ -350,6 +385,10 @@ impl TaskManager {
                 }
             })
             .collect()
+    }
+
+    pub fn get_surface_ids(&self) -> Vec<u32> {
+        self.data().iter().map(|t| t.id).collect()
     }
 
     /// Note: the `id` field in `task` is ignored.
