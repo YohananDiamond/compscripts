@@ -6,15 +6,16 @@ use select::predicate::Name;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::io::{self, Read, Write};
+use std::io::Read;
 use std::path::Path;
 
 mod lib;
 use lib::{
-    array_serialization::*,
-    functions::{find_free_value, fzagnostic, touch_and_open, touch_read},
+    array_serialization::{ArrayLines, JsonArraySerializer},
+    misc::{find_free_value, fzagnostic},
+    io::{touch_and_open, touch_read, read_line},
     traits::DataManager,
-    getenv,
+    aliases::getenv,
 };
 
 fn main() {
@@ -292,17 +293,11 @@ impl BookmarkManager {
         let title = match url_get_title(url) {
             Ok(t) => t,
             Err(e) => {
-                eprintln!("Failed to get title: {}", e);
-                eprintln!("Url: {:?}", url);
-                eprint!("Type a new title: ");
-                io::stdout().flush().expect("failed to flush stdout");
+                eprintln!("Failed to get title:");
+                eprintln!("  Url: {:?}", url);
+                eprintln!("  Error: {}", e);
 
-                let mut buffer = String::new();
-                io::stdin()
-                    .read_line(&mut buffer)
-                    .expect("failed to read line");
-
-                buffer
+                read_line("  Type a new title: ").unwrap()
             }
         }
         .trim()

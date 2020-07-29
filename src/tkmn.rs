@@ -6,8 +6,9 @@ mod lib;
 use clap::Clap;
 use lib::{
     array_serialization::{ArrayArray, JsonArraySerializer},
-    functions::{find_free_value, touch_read},
-    getenv,
+    misc::find_free_value,
+    io::touch_read,
+    aliases::getenv,
     traits::DataManager,
 };
 use regex::Regex;
