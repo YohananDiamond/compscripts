@@ -1,6 +1,7 @@
 // TODO: add a date struct - needed for defer dates and creation dates.
 // TODO: pseudo-IDs
 // TODO: make task_interact a little bit more clearer
+// TODO: rename some concepts (such as Task -> Item)
 
 mod lib;
 use clap::Clap;
