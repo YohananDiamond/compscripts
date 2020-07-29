@@ -149,8 +149,6 @@ impl DataManager for TaskManager {
             }
         };
 
-        // TODO: ID duplication checking, used_ids and etc.
-
         let code: i32 = match options.subcmd {
             Some(SubCmd::Add(s)) => {
                 if let Some(name) = s.name {
@@ -203,6 +201,7 @@ impl DataManager for TaskManager {
 impl TaskManager {
     pub fn new(data: Vec<Task>) -> Result<Self, String> {
         let mut used_ids: HashSet<u32> = HashSet::new();
+        taskvec_find_ids(&mut used_ids, &data)?;
 
         for task in data.iter() {
             // TODO: replace this with something more stables (sub-tasks)
@@ -229,6 +228,19 @@ impl TaskManager {
 
         Ok(id)
     }
+}
+
+fn taskvec_find_ids(set: &mut HashSet<u32>, data: &Vec<Task>) -> Result<(), String> {
+    for x in data {
+        if set.contains(&x.id) {
+            return Err(format!("Repeated ID: {}", x.id));
+        }
+        set.insert(x.id);
+
+        taskvec_find_ids(set, data)?;
+    }
+
+    Ok(())
 }
 
 fn parse_range_str(string: &str) -> Result<Vec<u32>, String> {
