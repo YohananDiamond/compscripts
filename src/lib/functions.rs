@@ -93,7 +93,7 @@ pub fn touch_read(path: &Path) -> Result<String, String> {
 pub fn find_free_value(set: &HashSet<u32>) -> u32 {
     let mut free_value = 0u32;
     loop {
-        if set.contains(&free_value) {
+        if !set.contains(&free_value) {
             break free_value;
         }
         free_value += 1;

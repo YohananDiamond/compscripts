@@ -1,4 +1,5 @@
-// TODO: make a date struct or something and add {defer dates, creation dates}
+// TODO: add a date struct - needed for defer dates and creation dates.
+// TODO: pseudo-IDs
 
 mod lib;
 use clap::Clap;
@@ -18,12 +19,12 @@ fn main() {
     std::process::exit(TaskManager::start());
 }
 
-#[derive(Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 struct Task {
     id: u32,
     name: String,
     context: Option<String>,
-    actionable: bool,
+    state: Option<bool>, // Some(b) means task (completed if b == true), None means note
     children: Vec<Task>,
 }
 
@@ -36,6 +37,30 @@ impl Ord for Task {
 impl PartialOrd for Task {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl Task {
+    pub fn print(&self, level: usize) {
+        println!(
+            "{}({}) {} {} {}",
+            std::iter::repeat(" ").take(level * 2).collect::<String>(),
+            self.id,
+            match self.state {
+                None => "NOTE",
+                Some(true) => "DONE",
+                Some(false) => "TODO",
+            },
+            self.name,
+            match self.context {
+                Some(ref ctx) => format!("({})", ctx),
+                None => format!(""),
+            }
+        );
+
+        for child in &self.children {
+            child.print(level + 1);
+        }
     }
 }
 
@@ -77,9 +102,9 @@ impl DataManager for TaskManager {
         #[derive(Clap, Debug)]
         struct SelCmd {
             #[clap(about = "The selection range")]
-            pub selection: String, // TODO: make a clearer format (X..Y; X,Y; X)
-            #[clap(subcommand)]
-            pub action: ActionCmd,
+            pub range: String,
+            #[clap(subcommand, about = "What to do with the selection; defaults to list.")]
+            pub action: Option<ActionCmd>,
         }
 
         #[derive(Clap, Debug)]
@@ -90,6 +115,8 @@ impl DataManager for TaskManager {
             Sub(TaskMod),
             #[clap(about = "Modify a task")]
             Mod(TaskMod),
+            Done,
+            // Del, // TODO
         }
 
         #[derive(Clap, Debug)]
@@ -99,11 +126,10 @@ impl DataManager for TaskManager {
             #[clap(short, long, about = "The context of the task")]
             context: Option<String>,
             #[clap(short, long, about = "If the task is a note")]
-            note: bool,
+            note: Option<bool>,
         }
 
         let options = Opts::parse();
-        eprintln!("{:?}", options); // TODO: remove this
 
         let path_string = match options.path {
             Some(cfg) => cfg,
@@ -144,7 +170,7 @@ impl DataManager for TaskManager {
         let mut manager = match TaskManager::new(data) {
             Ok(o) => o,
             Err(e) => {
-                eprintln!("Failed to set up bookmarks: {}", e);
+                eprintln!("Failed to set up manager: {}", e);
                 return 1;
             }
         };
@@ -156,7 +182,7 @@ impl DataManager for TaskManager {
                         id: 0,
                         name: name,
                         context: s.context,
-                        actionable: !s.note,
+                        state: if s.note.unwrap_or(false) { None } else { Some(false) },
                         children: Vec::new(),
                     }) {
                         Ok(_) => {
@@ -173,9 +199,61 @@ impl DataManager for TaskManager {
                     return 1;
                 }
             }
-            // Some(SubCmd::Sel(s)) => manager.subcmd_addfromfile(&s),
-            // Some(SubCmd::List) => manager.subcmd_report(Reports::All),
-            // Some(SubCmd::Next) | None => manager.subcmd_report(Reports::Next),
+            Some(SubCmd::Sel(s)) => match parse_range_str(&s.range) {
+                Ok(range) => {
+                    if range.len() == 0 {
+                        eprintln!("No selection was specified.");
+                        1
+                    } else {
+                        match s.action.unwrap_or(ActionCmd::List) {
+                            ActionCmd::List => {
+                                let invalid_ids = manager.find_invalid_ids(&range[..]);
+                                if invalid_ids.len() > 0 {
+                                    eprintln!("Could not find task with IDs {:?}", invalid_ids);
+                                    1
+                                } else {
+                                    manager
+                                        .show_report("Selection Listing", &range[..])
+                                        .unwrap();
+                                    0
+                                }
+                            }
+                            // ActionCmd::Sub(_) => 127, // TODO
+                            // ActionCmd::Mod(_) => 127, // TODO
+                            ActionCmd::Done => {
+                                let invalid_ids = manager.find_invalid_ids(&range[..]);
+                                if invalid_ids.len() > 0 {
+                                    eprintln!("Could not find task with IDs {:?}", invalid_ids);
+                                    1
+                                } else {
+                                    // Cool workaround for loop breaks.
+                                    // https://github.com/rust-lang/rfcs/issues/961#issuecomment-264699920https://github.com/rust-lang/rfcs/issues/961#issuecomment-264699920
+                                    'range: loop {
+                                        for id in range {
+                                            if manager.task_interact::<_, bool>(id, |t| t.state.is_none()).unwrap() {
+                                                eprintln!("Item @[ID:{}] is a note and cannot be completed.", id);
+                                                break 'range 1
+                                            } else {
+                                                manager.task_interact_mut(id, |t| {
+                                                    t.state = Some(true);
+                                                }).unwrap();
+                                            }
+                                        }
+                                        break 'range 0
+                                    }
+                                }
+                            }
+                            _ => 127,
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse range: {}", e);
+                    1
+                }
+            },
+            // Some(SubCmd::List) => manager.subcmd_report(Reports::All), // TODO
+            // Some(SubCmd::Next) | None => manager.subcmd_report(Reports::Next), // TODO
             _ => 127,
         };
 
@@ -203,20 +281,75 @@ impl TaskManager {
         let mut used_ids: HashSet<u32> = HashSet::new();
         taskvec_find_ids(&mut used_ids, &data)?;
 
-        for task in data.iter() {
-            // TODO: replace this with something more stables (sub-tasks)
-            if used_ids.contains(&task.id) {
-                return Err(format!("repeated ID: {}", task.id));
-            } else {
-                used_ids.insert(task.id);
-            }
-        }
-
         Ok(TaskManager {
             data: data,
             modified: false,
             used_ids: used_ids,
         })
+    }
+
+    pub fn find_task(&self, id: u32) -> Option<&Task> {
+        // FIXME: this doesn't consider subtasks
+        self.data().iter().find(|t| t.id == id)
+    }
+
+    pub fn find_task_mut(&mut self, id: u32) -> Option<&mut Task> {
+        // FIXME: this doesn't consider subtasks
+        self.data_mut().iter_mut().find(|t| t.id == id)
+    }
+
+    /// Returns Ok(()) in most situations.
+    /// Returns Err(()) if `id` was not found.
+    pub fn task_interact<F, T>(&self, id: u32, interaction: F) -> Result<T, ()>
+    where
+        F: Fn(&Task) -> T,
+    {
+        if let Some(task) = self.find_task(id) {
+            Ok(interaction(task))
+        } else {
+            Err(())
+        }
+    }
+
+    /// Returns Ok(()) in most situations.
+    /// Returns Err(()) if `id` was not found.
+    pub fn task_interact_mut<F, T>(&mut self, id: u32, interaction: F) -> Result<T, ()>
+    where
+        F: Fn(&mut Task) -> T,
+    {
+        if let Some(task) = self.find_task_mut(id) {
+            let interaction_result = interaction(task);
+            self.modified = true;
+            Ok(interaction_result)
+        } else {
+            Err(())
+        }
+    }
+
+    /// Returns `Err(id)` if id `id` was not found.
+    pub fn show_report(&self, report_name: &str, ids: &[u32]) -> Result<(), u32> {
+        println!("Report: {}", report_name);
+        for id in ids {
+            if self.task_interact(*id, |t| {
+                t.print(0);
+            }).is_err() {
+                return Err(*id);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn find_invalid_ids(&self, ids: &[u32]) -> Vec<u32> {
+        ids.iter()
+            .filter_map(|id| {
+                if self.used_ids.contains(id) {
+                    None
+                } else {
+                    Some(*id)
+                }
+            })
+            .collect()
     }
 
     /// Note: the `id` field in `task` is ignored.
@@ -231,13 +364,18 @@ impl TaskManager {
 }
 
 fn taskvec_find_ids(set: &mut HashSet<u32>, data: &Vec<Task>) -> Result<(), String> {
-    for x in data {
-        if set.contains(&x.id) {
-            return Err(format!("Repeated ID: {}", x.id));
+    for task in data {
+        if set.contains(&task.id) {
+            return Err(format!(
+                "found repeated ID: {} -- with task {:?}",
+                task.id, task
+            ));
+        } else {
+            set.insert(task.id);
         }
-        set.insert(x.id);
 
-        taskvec_find_ids(set, data)?;
+        // Recursively search for IDs in subtasks
+        taskvec_find_ids(set, &task.children)?;
     }
 
     Ok(())
