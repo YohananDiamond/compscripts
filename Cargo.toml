@@ -18,8 +18,12 @@ lto = true
 
 [[bin]]
 name = "bkmk"
-path = "src/bkmk.rs"
+path = "src/bkmk/main.rs"
 
 [[bin]]
 name = "tkmn"
-path = "src/tkmn.rs"
+path = "src/tkmn/main.rs"
+
+[lib]
+name = "lib"
+path = "src/lib/mod.rs"

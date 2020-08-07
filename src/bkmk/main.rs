@@ -9,7 +9,6 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::Path;
 
-mod lib;
 use lib::{
     array_serialization::{ArrayLines, JsonArraySerializer},
     misc::{find_free_value, fzagnostic},

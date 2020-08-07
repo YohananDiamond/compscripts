@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::io;
-use crate::lib::aliases::JsonError;
+use crate::aliases::JsonError;
 use serde::{Deserialize, Serialize};
 
 pub trait JsonArraySerializer<'a, T> {
