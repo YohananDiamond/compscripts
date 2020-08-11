@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::Path;
 
-use lib::{
+use core::{
     array_serialization::{ArrayLines, JsonArraySerializer},
     misc::{find_free_value, fzagnostic},
     io::{touch_and_open, touch_read, read_line},
