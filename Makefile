@@ -1,9 +1,13 @@
 DESTDIR := ~/.local/bin
-.PHONY: output install check
+BUILDTYPE := release
 
-output: $(DEPS)
-	cargo build --bin bkmk --release
-	cargo build --bin itmn --release
+output: bkmk itmn
+
+bkmk:
+	cargo build --bin bkmk --$(BUILDTYPE)
+
+itmn:
+	cargo build --bin itmn --$(BUILDTYPE)
 
 install: output
 	@echo Installing to $(DESTDIR)...
@@ -11,3 +15,5 @@ install: output
 
 check:
 	cargo check
+
+.PHONY: output install check
