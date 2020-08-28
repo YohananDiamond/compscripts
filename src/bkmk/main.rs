@@ -4,7 +4,8 @@ mod manager;
 
 use clap::Clap;
 use std::path::Path;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::process::Command;
 
 use bookmark::Bookmark;
 use cli::*;
@@ -128,7 +129,7 @@ mod subcmd {
             // TODO: align selection numbers
             let input = not_archived.iter()
                 .enumerate()
-                .map(|(i, b)| format!("{} {} ({})", i, b.name, b.url))
+                .map(|(i, b)| format!("{:>3} {:<95} ({})", i, b.name, b.url))
                 .collect::<Vec<String>>()
                 .join("\n");
 
@@ -144,9 +145,9 @@ mod subcmd {
         };
 
         const ACTIONS: &'static [&'static str] = &[
-            "open (via $OPENER)",
+            "open (via $OPENER -> xdg-open)",
             "archive",
-            // TODO: "copy (via xclip)",
+            "copy (via xclip)",
         ];
 
         let chosen_action = {
@@ -166,9 +167,9 @@ mod subcmd {
         match chosen_action {
             0 => {
                 manager.interact(chosen_id, |b| {
-                    let opener = getenv("OPENER").unwrap_or("xdg-opener".into());
+                    let opener = getenv("OPENER").unwrap_or("xdg-open".into());
 
-                    match std::process::Command::new(opener)
+                    match Command::new(opener)
                         .args(&[&b.url])
                         .spawn()
                     {
@@ -184,11 +185,34 @@ mod subcmd {
             1 => {
                 manager.interact_mut(chosen_id, |b| {
                     b.archived = true;
-                }).unwrap();
 
-                ExitResult::Success
+                    ExitResult::Success
+                }).unwrap()
             },
-            _ => panic!("unknown code"), // TODO: turn this into a not-panic, butt just a simple error
+            2 => {
+                manager.interact_mut(chosen_id, |b| {
+                    match Command::new("xclip")
+                        .args(&["-sel", "clipboard"])
+                        .stdin(std::process::Stdio::piped())
+                        .spawn()
+                    {
+                        Ok(mut child) => {
+                            let stdin = child.stdin.as_mut().unwrap();
+                            write!(stdin, "{}", b.url).unwrap();
+
+                            if child.wait().unwrap().code().unwrap() == 0 {
+                                ExitResult::Success
+                            } else {
+                                ExitResult::from("failed to save to clipboard")
+                            }
+                        },
+                        Err(_) => {
+                            ExitResult::from("failed to start xclip command")
+                        }
+                    }
+                }).unwrap()
+            },
+            _ => panic!("unknown code"), // TODO: turn this into a not-panic, but just a simple error
         }
     }
 }
