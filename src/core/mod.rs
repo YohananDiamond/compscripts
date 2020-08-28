@@ -1,7 +1,6 @@
-#![allow(dead_code)]
+#![feature(termination_trait_lib)]
 
-pub mod traits;
-pub mod array_serialization;
+pub mod data;
+pub mod aliases;
 pub mod io;
 pub mod misc;
-pub mod aliases;

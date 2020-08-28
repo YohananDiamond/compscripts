@@ -8,3 +8,6 @@ output: $(DEPS)
 install: output
 	@echo Installing to $(DESTDIR)...
 	cd target/release && cp bkmk tkmn -t $(DESTDIR)
+
+check:
+	cargo check

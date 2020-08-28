@@ -21,14 +21,12 @@ pub fn touch_and_open(path: &Path) -> Result<File, String> {
                         parent.display()
                     ));
                 }
-            } else {
-                if let Err(e) = create_dir_all(parent) {
-                    return Err(format!(
-                        "failed to create parent path {}: {}",
-                        parent.display(),
-                        e
-                    ));
-                }
+            } else if let Err(e) = create_dir_all(parent) {
+                return Err(format!(
+                    "failed to create parent path {}: {}",
+                    parent.display(),
+                    e
+                ));
             }
         }
 
@@ -65,5 +63,5 @@ pub fn read_line(prompt: &str) -> Result<String, io::Error> {
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer)?;
 
-    Ok(buffer)
+    Ok(buffer.trim().into())
 }

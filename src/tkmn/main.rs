@@ -13,33 +13,15 @@ use core::{
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::Path;
 
-fn main() {
-    std::process::exit(TaskManager::start());
-}
-
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 struct Task {
     id: u32,
     name: String,
     context: Option<String>,
     state: Option<bool>, // Some(b) means task (completed if b == true), None means note
     children: Vec<Task>,
-}
-
-impl Ord for Task {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.id.cmp(&other.id)
-    }
-}
-
-impl PartialOrd for Task {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl Task {
@@ -118,7 +100,6 @@ impl DataManager for TaskManager {
             #[clap(about = "Modify a task")]
             Mod(TaskMod),
             Done,
-            // Del, // TODO
         }
 
         #[derive(Clap, Debug)]
@@ -143,7 +124,7 @@ impl DataManager for TaskManager {
             Ok(c) => {
                 if c.chars()
                     .filter(|x| match x {
-                        '\n' | ' ' => false,
+                        '\n' | ' ' | '\t' => false,
                         _ => true,
                     })
                     .collect::<String>()
@@ -419,59 +400,4 @@ fn taskvec_find_ids(set: &mut HashSet<u32>, data: &Vec<Task>) -> Result<(), Stri
     }
 
     Ok(())
-}
-
-fn parse_range_str(string: &str) -> Result<Vec<u32>, String> {
-    let mut result: Vec<u32> = Vec::new();
-    let range_regex = Regex::new(r"^(\d+)\.\.(\d+)$").unwrap();
-    let number_regex = Regex::new(r"^\d+$").unwrap();
-
-    for number in string
-        .chars()
-        .filter(|x| *x != ' ')
-        .collect::<String>()
-        .split(",")
-    {
-        if number_regex.is_match(number) {
-            result.push(number.parse::<u32>().unwrap())
-        } else if range_regex.is_match(number) {
-            let captures = range_regex.captures(number).unwrap();
-            let num1: u32 = captures[1].parse().unwrap();
-            let num2: u32 = captures[2].parse().unwrap();
-
-            if num2 < num1 {
-                return Err(format!(
-                    "Second number {} is smaller than first number {} in range {}",
-                    num2, num1, number
-                ));
-            }
-
-            let mut i: u32 = num1;
-            loop {
-                result.push(i);
-                i += 1;
-                if i > num2 {
-                    break;
-                }
-            }
-        } else {
-            return Err(format!("Could not parse {:?}", number));
-        }
-    }
-
-    Ok(result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn range() {
-        let range_str = "1..10,4,5";
-        assert_eq!(
-            parse_range_str(range_str),
-            Ok(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 4, 5])
-        );
-    }
 }
