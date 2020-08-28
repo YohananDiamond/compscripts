@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio, Termination};
+use std::fmt::Display;
 
 #[derive(Clone, Copy)]
 pub struct ExitCode(pub i32);
@@ -11,6 +12,42 @@ pub struct ExitCode(pub i32);
 impl Termination for ExitCode {
     fn report(self) -> i32 {
         self.0
+    }
+}
+
+pub enum ExitResult<'a> {
+    Success,
+    SilentError,
+    DisplayError(Box<dyn Display + 'a>),
+}
+
+impl<T: Display> From<Result<(), T>> for ExitCode {
+    fn from(r: Result<(), T>) -> ExitCode {
+        if let Err(e) = r {
+            eprintln!("Error: {}", e);
+            ExitCode(1)
+        } else {
+            ExitCode(0)
+        }
+    }
+}
+
+impl From<ExitResult<'_>> for ExitCode {
+    fn from(r: ExitResult) -> ExitCode {
+        match r {
+            ExitResult::Success => ExitCode(0),
+            ExitResult::SilentError => ExitCode(1),
+            ExitResult::DisplayError(e) => {
+                eprintln!("Error: {}", e);
+                ExitCode(1)
+            }
+        }
+    }
+}
+
+impl<'a, T: Display + 'a> From<T> for ExitResult<'a> {
+    fn from(thing: T) -> ExitResult<'a> {
+        ExitResult::DisplayError(Box::new(thing))
     }
 }
 

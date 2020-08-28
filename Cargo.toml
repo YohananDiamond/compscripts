@@ -16,13 +16,9 @@ regex = "1.3.9"
 opt-level = "s"
 lto = true
 
-# [[bin]]
-# name = "bkmk"
-# path = "src/bkmk/main.rs"
-
-# [[bin]]
-# name = "tkmn"
-# path = "src/tkmn/main.rs"
+[[bin]]
+name = "bkmk"
+path = "src/bkmk/main.rs"
 
 [[bin]]
 name = "itmn"
