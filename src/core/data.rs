@@ -63,9 +63,12 @@ where
     <Self as Manager>::Data: Deserialize<'a> + Serialize,
 {
     /// TODO: @doc
-    fn export(&self, _prettified: bool) -> String {
-        // TODO: use prettified
-        serde_json::to_string(self.data()).unwrap()
+    fn export(&self, prettified: bool) -> String {
+        if prettified {
+            serde_json::to_string_pretty(self.data()).unwrap()
+        } else {
+            serde_json::to_string(self.data()).unwrap()
+        }
     }
 
     /// TODO: @doc

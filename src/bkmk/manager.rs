@@ -83,7 +83,7 @@ impl BookmarkManager {
     ) -> Result<(), String> {
         for bookmark in self.data() {
             if bookmark.url == url {
-                return Err(format!("repeated url with bookmark #{}", bookmark.id));
+                return Err(format!("repeated url with bookmark #{} ({})", bookmark.id, url));
             }
         }
 
@@ -100,7 +100,7 @@ impl BookmarkManager {
 
         let free_id = core::misc::find_free_value(&self.used_ids);
 
-        eprintln!("Adding @bookmark[{:?} <-> {:?}]", url, title);
+        eprintln!("New bookmark: {:?} ({:?})", title, url);
 
         self.data_mut().push(Bookmark {
             id: free_id,

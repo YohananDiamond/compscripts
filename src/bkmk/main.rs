@@ -138,7 +138,7 @@ mod subcmd {
                 &input, 30,
             ) {
                 Some(s) => {
-                    not_archived[s.split(" ").next().unwrap().parse::<usize>().unwrap()].id
+                    not_archived[s.trim().split(" ").next().unwrap().parse::<usize>().unwrap()].id
                 },
                 None => return ExitResult::SilentError,
             }
