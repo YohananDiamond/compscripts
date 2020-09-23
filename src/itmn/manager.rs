@@ -201,6 +201,7 @@ impl ItemManager {
         &self.ref_ids
     }
 
+    // FIXME: not working (why?)
     pub fn mass_modify(&mut self, range: &[Id], m: ItemBatchMod) {
         // TODO: validate context (lowercase, replace spaces with dashes, etc.)
         // This should probably be done in another function.
@@ -253,6 +254,8 @@ impl ItemManager {
                         range.len(),
                         if range.len() == 1 { "" } else { "s" }
                     );
+
+                    self.after_interact_mut_hook();
                 }
             }
         }

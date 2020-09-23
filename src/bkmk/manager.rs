@@ -117,7 +117,7 @@ impl BookmarkManager {
 
     pub fn save_if_modified(&self, path: &Path) -> Result<(), std::io::Error> {
         if self.modified {
-            self.save_to_file(path, false)
+            self.save_to_file(path, true)
         } else {
             Ok(())
         }

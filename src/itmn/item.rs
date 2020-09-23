@@ -2,14 +2,14 @@ use core::data::{Id, Searchable};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub enum State {
     Todo,
     Done,
     Note,
 }
 
-#[derive(Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Item {
     /// None means that this task doesn't have a reference ID. This only happens to completed tasks.
     /// TODO: finish doc for this
@@ -49,7 +49,7 @@ impl Searchable for Item {
 
 impl Item {
     pub fn normalize(self) -> Self {
-        let new_name = self.name.chars().filter(|&c| c == '\n').collect();
+        let new_name = self.name.chars().filter(|&c| c != '\n').collect();
         let new_context = if let Some(ctx) = self.context {
             Some(ctx.chars().filter(|&c| c == '\n').collect())
         } else {

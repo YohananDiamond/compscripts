@@ -1,6 +1,6 @@
 use clap::Clap;
 
-#[derive(Clap)]
+#[derive(Debug, Clap)]
 pub struct Options {
     #[clap(
         short,
@@ -12,7 +12,7 @@ pub struct Options {
     pub subcmd: Option<SubCmd>,
 }
 
-#[derive(Clap)]
+#[derive(Debug, Clap)]
 pub enum SubCmd {
     // #[clap(subcommand, about = "Shows a report - defaults to [next]")]
     // TODO: Report(ReportSelection),
@@ -29,7 +29,7 @@ pub enum SubCmd {
     // TODO: RegexMatch,
 }
 
-#[derive(Clap)]
+#[derive(Debug, Clap)]
 pub struct ItemAddDetails {
     #[clap(about = "The name of the item")]
     pub name: String,
@@ -39,7 +39,7 @@ pub struct ItemAddDetails {
     pub note: Option<bool>,
 }
 
-#[derive(Clap)]
+#[derive(Debug, Clap)]
 pub struct SelectionDetails {
     #[clap(about = "The selection range")]
     pub range: String, // TODO: document range syntax
@@ -50,7 +50,7 @@ pub struct SelectionDetails {
     pub action: Option<SelectionAction>,
 }
 
-#[derive(Clap)]
+#[derive(Debug, Clap)]
 pub enum SelectionAction {
     #[clap(alias = "mod", about = "Modify the matches")]
     Modify(ItemBatchMod),
@@ -67,7 +67,7 @@ pub enum SelectionAction {
     // TODO: Delete(DelArgs), // TODO: --force/-f option
 }
 
-#[derive(Clap)]
+#[derive(Debug, Clap)]
 pub struct ItemBatchMod {
     #[clap(about = "The item's new name")]
     pub name: Option<String>,
