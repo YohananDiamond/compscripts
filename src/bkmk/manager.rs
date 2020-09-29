@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use crate::bookmark::Bookmark;
-use core::data::{JsonSerializer, Manager, Id};
+use core::data::{Id, JsonSerializer, Manager};
 
 pub struct BookmarkManager {
     data: Vec<Bookmark>,
@@ -32,7 +32,10 @@ impl BookmarkManager {
 
         for bookmark in data.iter() {
             if used_ids.contains(&bookmark.id) {
-                return Err(format!("repeated ID: {}; it'll have to be removed manually.", bookmark.id));
+                return Err(format!(
+                    "repeated ID: {}; it'll have to be removed manually.",
+                    bookmark.id
+                ));
             } else {
                 used_ids.insert(bookmark.id);
             }
@@ -83,20 +86,27 @@ impl BookmarkManager {
     ) -> Result<(), String> {
         for bookmark in self.data() {
             if bookmark.url == url {
-                return Err(format!("repeated url with bookmark #{} ({})", bookmark.id, url));
+                return Err(format!(
+                    "repeated url with bookmark #{} ({})",
+                    bookmark.id, url
+                ));
             }
         }
 
         let title = match crate::bookmark::url_get_title(&url) {
             Ok(title) => title,
-            Err(e) => if read_line {
-                eprintln!("Failed to get title: {}", e);
-                eprintln!("  Url: {:?}", url);
-                core::io::read_line("  Type a new title: ").unwrap()
-            } else {
-                return Err(format!("failed to get title: {}", e));
+            Err(e) => {
+                if read_line {
+                    eprintln!("Failed to get title: {}", e);
+                    eprintln!("  Url: {:?}", url);
+                    core::io::read_line("  Type a new title: ").unwrap()
+                } else {
+                    return Err(format!("failed to get title: {}", e));
+                }
             }
-        }.trim().to_string();
+        }
+        .trim()
+        .to_string();
 
         let free_id = core::misc::find_free_value(&self.used_ids);
 

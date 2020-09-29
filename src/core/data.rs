@@ -33,7 +33,9 @@ pub trait Manager {
 
     /// TODO: @doc
     fn find_mut(&mut self, ref_id: Id) -> Option<&mut Self::Data> {
-        self.data_mut().iter_mut().find(|i| i.ref_id() == Some(ref_id))
+        self.data_mut()
+            .iter_mut()
+            .find(|i| i.ref_id() == Some(ref_id))
     }
 
     /// Interacts with an item by its reference ID.
@@ -48,7 +50,10 @@ pub trait Manager {
         ref_id: Id,
         interaction: F,
     ) -> Option<T> {
-        let item = self.data_mut().iter_mut().find(|i| i.ref_id() == Some(ref_id))?;
+        let item = self
+            .data_mut()
+            .iter_mut()
+            .find(|i| i.ref_id() == Some(ref_id))?;
         let result = interaction(item);
         self.after_interact_mut_hook();
         Some(result)

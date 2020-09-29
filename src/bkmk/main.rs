@@ -82,19 +82,14 @@ mod subcmd {
     use core::misc::fzagnostic;
 
     pub fn add(manager: &mut BookmarkManager, param: AddParameters) -> ExitResult {
-        ExitResult::from_display_result(
-            if let Some(title) = param.title {
-                manager.add_bookmark(title, param.url, Vec::new())
-            } else {
-                manager.add_bookmark_from_url(param.url, true)
-            }
-        )
+        ExitResult::from_display_result(if let Some(title) = param.title {
+            manager.add_bookmark(title, param.url, Vec::new())
+        } else {
+            manager.add_bookmark_from_url(param.url, true)
+        })
     }
 
-    pub fn add_from_file(
-        manager: &mut BookmarkManager,
-        param: FileParameters,
-    ) -> ExitResult {
+    pub fn add_from_file(manager: &mut BookmarkManager, param: FileParameters) -> ExitResult {
         let path = Path::new(&param.file);
         let mut file = match core::io::touch_and_open(path) {
             Ok(file) => file,

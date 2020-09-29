@@ -1,10 +1,10 @@
-use std::cmp::Ordering;
-use core::data::{Searchable, Id};
-use serde::{Deserialize, Serialize};
+use core::data::{Id, Searchable};
+use curl::easy::Easy;
 use select::document::Document;
 use select::node::Data;
 use select::predicate::Name;
-use curl::easy::Easy;
+use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct Bookmark {
@@ -44,10 +44,12 @@ pub fn url_get_title(url: &str) -> Result<String, String> {
 
     {
         let mut transfer = easy.transfer();
-        transfer.write_function(|data| {
-            vec.extend_from_slice(data);
-            Ok(data.len())
-        }).unwrap(); // TODO: switch for an "expect"
+        transfer
+            .write_function(|data| {
+                vec.extend_from_slice(data);
+                Ok(data.len())
+            })
+            .unwrap(); // TODO: switch for an "expect"
 
         transfer.perform().unwrap(); // TODO: should I really unwrap this?
     }

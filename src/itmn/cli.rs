@@ -71,7 +71,11 @@ pub enum SelectionAction {
 pub struct ItemBatchMod {
     #[clap(about = "The item's new name")]
     pub name: Option<String>,
-    #[clap(short, long, about = "The item's new context; set to an empty string to unset")]
+    #[clap(
+        short,
+        long,
+        about = "The item's new context; set to an empty string to unset"
+    )]
     pub context: Option<String>,
     #[clap(short, long, about = "The item's new type")]
     pub note: Option<bool>,

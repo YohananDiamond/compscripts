@@ -1,19 +1,16 @@
 DESTDIR := ~/.local/bin
-BUILDTYPE := release
+BUILD_TYPE := release
 
-output: bkmk itmn
-
-bkmk:
-	cargo build --bin bkmk --$(BUILDTYPE)
-
-itmn:
-	cargo build --bin itmn --$(BUILDTYPE)
+output:
+	cargo build --bin bkmk --$(BUILD_TYPE)
+	cargo build --bin itmn --$(BUILD_TYPE)
 
 install: output
 	@echo Installing to $(DESTDIR)...
 	cd target/release && cp bkmk itmn -t $(DESTDIR)
 
 check:
-	cargo check
+	cargo check --bin bkmk
+	cargo check --bin itmn
 
 .PHONY: output install check

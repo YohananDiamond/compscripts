@@ -2,7 +2,11 @@ use clap::Clap;
 
 #[derive(Clap)]
 pub struct Options {
-    #[clap(short, long, about = "the path to the bookmarks file (default: $BKMN_FILE -> ~/.local/share/bkmk)")]
+    #[clap(
+        short,
+        long,
+        about = "the path to the bookmarks file (default: $BKMN_FILE -> ~/.local/share/bkmk)"
+    )]
     pub path: Option<String>,
     #[clap(subcommand)]
     pub subcmd: SubCmd,

@@ -10,10 +10,10 @@ mod manager;
 use cli::*;
 use core::aliases::getenv;
 use core::data::{JsonSerializer, Manager};
-use core::error::{ExitResult, ExitCode};
+use core::error::ExitCode;
 use item::{Item, State};
+use manager::{Error, ItemManager};
 use report::ReportStyle;
-use manager::{ItemManager, Error};
 
 mod report {
     use super::{Item, State};
@@ -26,7 +26,6 @@ mod report {
     }
 
     // pub mod generators {}
-
 
     pub fn print_single_item<F: Fn(&Item) -> bool + Copy>(item: &Item, indentation: usize, f: F) {
         if f(item) {
@@ -50,7 +49,12 @@ mod report {
         }
     }
 
-    pub fn print_item_styled<F: Fn(&Item) -> bool + Copy>(item: &Item, style: ReportStyle, indentation: usize, f: F) {
+    pub fn print_item_styled<F: Fn(&Item) -> bool + Copy>(
+        item: &Item,
+        style: ReportStyle,
+        indentation: usize,
+        f: F,
+    ) {
         let f_result = f(item);
 
         match style {
@@ -62,7 +66,12 @@ mod report {
 
                 if f_result {
                     if !item.children.is_empty() {
-                        print_item_styled(&item.children[0], ReportStyle::Shallow, indentation + 1, f);
+                        print_item_styled(
+                            &item.children[0],
+                            ReportStyle::Shallow,
+                            indentation + 1,
+                            f,
+                        );
                     }
                     if item.children.len() > 1 {
                         eprintln!(
@@ -88,7 +97,12 @@ mod report {
     }
 
     // TODO: add sort methods
-    pub fn display_report<F: Fn(&Item) -> bool + Copy>(name: &str, report_list: &[&Item], style: ReportStyle, f: F) {
+    pub fn display_report<F: Fn(&Item) -> bool + Copy>(
+        name: &str,
+        report_list: &[&Item],
+        style: ReportStyle,
+        f: F,
+    ) {
         eprintln!("{} | {} selected items", name, report_list.len());
 
         for item in report_list {
@@ -111,7 +125,11 @@ fn main() -> ExitCode {
     let path = Path::new(&pstring);
     let contents = match core::io::touch_read(&path) {
         Ok(s) => {
-            if s.chars().filter(|c| !matches!(c, '\n' | ' ' | '\t')).count() == 0 {
+            if s.chars()
+                .filter(|c| !matches!(c, '\n' | ' ' | '\t'))
+                .count()
+                == 0
+            {
                 String::from("[]")
             } else {
                 s
@@ -198,19 +216,37 @@ fn main() -> ExitCode {
                                     }
                                 });
                             }
-                        },
+                        }
                         SelectionAction::ListTree => {
-                            let sel_vec: Vec<&Item> = r.iter().map(|id| manager.find(*id).unwrap()).collect();
-                            report::display_report("Tree listing", &sel_vec, ReportStyle::Tree, |_| true);
-                        },
+                            let sel_vec: Vec<&Item> =
+                                r.iter().map(|id| manager.find(*id).unwrap()).collect();
+                            report::display_report(
+                                "Tree listing",
+                                &sel_vec,
+                                ReportStyle::Tree,
+                                |_| true,
+                            );
+                        }
                         SelectionAction::ListBrief => {
-                            let sel_vec: Vec<&Item> = r.iter().map(|id| manager.find(*id).unwrap()).collect();
-                            report::display_report("Tree listing", &sel_vec, ReportStyle::Brief, |_| true);
-                        },
+                            let sel_vec: Vec<&Item> =
+                                r.iter().map(|id| manager.find(*id).unwrap()).collect();
+                            report::display_report(
+                                "Tree listing",
+                                &sel_vec,
+                                ReportStyle::Brief,
+                                |_| true,
+                            );
+                        }
                         SelectionAction::ListShallow => {
-                            let sel_vec: Vec<&Item> = r.iter().map(|id| manager.find(*id).unwrap()).collect();
-                            report::display_report("Tree listing", &sel_vec, ReportStyle::Shallow, |_| true);
-                        },
+                            let sel_vec: Vec<&Item> =
+                                r.iter().map(|id| manager.find(*id).unwrap()).collect();
+                            report::display_report(
+                                "Tree listing",
+                                &sel_vec,
+                                ReportStyle::Shallow,
+                                |_| true,
+                            );
+                        }
                     }
                 }
             }
@@ -231,12 +267,24 @@ fn main() -> ExitCode {
             );
         }
         SubCmd::List => {
-            let items: Vec<&Item> = manager.get_surface_ref_ids().iter().map(|&i| manager.find(i).unwrap()).collect();
-            report::display_report("All tasks (surface)", &items, ReportStyle::Tree, |i| i.state != State::Done);
+            let items: Vec<&Item> = manager
+                .get_surface_ref_ids()
+                .iter()
+                .map(|&i| manager.find(i).unwrap())
+                .collect();
+            report::display_report("All tasks (surface)", &items, ReportStyle::Tree, |i| {
+                i.state != State::Done
+            });
         }
         SubCmd::Next => {
-            let items: Vec<&Item> = manager.get_surface_ref_ids().iter().map(|&i| manager.find(i).unwrap()).collect();
-            report::display_report("Next", &items, ReportStyle::Brief, |i| i.state == State::Todo);
+            let items: Vec<&Item> = manager
+                .get_surface_ref_ids()
+                .iter()
+                .map(|&i| manager.find(i).unwrap())
+                .collect();
+            report::display_report("Next", &items, ReportStyle::Brief, |i| {
+                i.state == State::Todo
+            });
         }
     }
 

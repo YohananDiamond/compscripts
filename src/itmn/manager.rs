@@ -1,9 +1,9 @@
-use std::path::Path;
 use std::collections::HashSet;
+use std::path::Path;
 
 use crate::cli::*;
-use core::data::{Id, JsonSerializer, Manager};
 use crate::item::{Item, State};
+use core::data::{Id, JsonSerializer, Manager};
 
 pub enum Error {
     RepeatedRefID(Id),
@@ -134,14 +134,17 @@ impl ItemManager {
         let free_internal_id = core::misc::find_free_value(&self.internal_ids);
         self.internal_ids.insert(free_internal_id);
 
-        self.data.push(Item {
-            ref_id: Some(free_ref_id),
-            internal_id: free_internal_id,
-            name: name,
-            context: context,
-            state: state,
-            children: children,
-        }.normalize());
+        self.data.push(
+            Item {
+                ref_id: Some(free_ref_id),
+                internal_id: free_internal_id,
+                name: name,
+                context: context,
+                state: state,
+                children: children,
+            }
+            .normalize(),
+        );
 
         self.modified = true;
     }
@@ -161,14 +164,17 @@ impl ItemManager {
         self.internal_ids.insert(free_internal_id);
 
         let result = if let Some(i) = self.find_mut(ref_id) {
-            i.children.push(Item {
-                ref_id: Some(free_ref_id),
-                internal_id: free_internal_id,
-                name: name,
-                context: context,
-                state: state,
-                children: children,
-            }.normalize());
+            i.children.push(
+                Item {
+                    ref_id: Some(free_ref_id),
+                    internal_id: free_internal_id,
+                    name: name,
+                    context: context,
+                    state: state,
+                    children: children,
+                }
+                .normalize(),
+            );
             Ok(())
         } else {
             Err(())
