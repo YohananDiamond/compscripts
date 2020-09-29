@@ -3,55 +3,11 @@ use std::cmp::Eq;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::io::{Read, Write};
-use std::process::{Command, Stdio, Termination};
-use std::fmt::Display;
+use std::process::{Command, Stdio};
 
-#[derive(Clone, Copy)]
-pub struct ExitCode(pub i32);
-
-impl Termination for ExitCode {
-    fn report(self) -> i32 {
-        self.0
-    }
-}
-
-pub enum ExitResult<'a> {
-    Success,
-    SilentError,
-    DisplayError(Box<dyn Display + 'a>),
-}
-
-impl<T: Display> From<Result<(), T>> for ExitCode {
-    fn from(r: Result<(), T>) -> ExitCode {
-        if let Err(e) = r {
-            eprintln!("Error: {}", e);
-            ExitCode(1)
-        } else {
-            ExitCode(0)
-        }
-    }
-}
-
-impl From<ExitResult<'_>> for ExitCode {
-    fn from(r: ExitResult) -> ExitCode {
-        match r {
-            ExitResult::Success => ExitCode(0),
-            ExitResult::SilentError => ExitCode(1),
-            ExitResult::DisplayError(e) => {
-                eprintln!("Error: {}", e);
-                ExitCode(1)
-            }
-        }
-    }
-}
-
-impl<'a, T: Display + 'a> From<T> for ExitResult<'a> {
-    fn from(thing: T) -> ExitResult<'a> {
-        ExitResult::DisplayError(Box::new(thing))
-    }
-}
-
+/// TODO
 pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
+    // TODO: clean up unwrap calls, maybe switch this to Result<String, String>
     match Command::new("fzagnostic")
         .args(&["-h", &format!("{}", height), "-p", prompt])
         .stdin(Stdio::piped())

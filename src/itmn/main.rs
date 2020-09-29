@@ -10,7 +10,7 @@ mod manager;
 use cli::*;
 use core::aliases::getenv;
 use core::data::{JsonSerializer, Manager};
-use core::misc::ExitCode;
+use core::error::{ExitResult, ExitCode};
 use item::{Item, State};
 use report::ReportStyle;
 use manager::{ItemManager, Error};
