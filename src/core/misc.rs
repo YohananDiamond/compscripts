@@ -5,9 +5,16 @@ use std::hash::Hash;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
-/// TODO
-pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
-    // TODO: clean up unwrap calls, maybe switch this to Result<String, String>
+use crate::error::ExitResult;
+
+/// Runs the `fzagnostic` command with data from the arguments.
+///
+/// Returns Ok with the choice if everything went successfully.
+///
+/// Returns Err with the error if the error was not intended.
+/// Returns Err with an empty string if fzagnostic was cancelled manually. (Ctrl-C, ESC etc.)
+pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Result<String, String> {
+    // TODO: use Iterator
     match Command::new("fzagnostic")
         .args(&["-h", &format!("{}", height), "-p", prompt])
         .stdin(Stdio::piped())
@@ -16,21 +23,23 @@ pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Option<String> {
     {
         Ok(mut child) => {
             let stdin = child.stdin.as_mut().unwrap();
-            write!(stdin, "{}", input).unwrap();
 
-            if child.wait().unwrap().code().unwrap() == 0 {
-                let mut choice = String::new();
-                match child.stdout.as_mut().unwrap().read_to_string(&mut choice) {
-                    Ok(_) => Some(choice),
-                    Err(_) => None,
-                }
+            if let Err(e) = write!(stdin, "{}", input) {
+                Err(format!("fzagnostic: failed to write to process stdin: {}", e))
             } else {
-                None
+                if child.wait().unwrap().success() {
+                    let mut choice = String::new();
+                    match child.stdout.as_mut().unwrap().read_to_string(&mut choice) {
+                        Ok(_) => Ok(choice),
+                        Err(e) => Err(format!("fzagnostic: failed to get process stdout: {}", e)),
+                    }
+                } else {
+                    Err(String::new())
+                }
             }
         }
-        Err(_) => {
-            eprintln!("failed to run command");
-            None
+        Err(e) => {
+            Err(format!("fzagnostic: failed to run command: {}", e))
         }
     }
 }

@@ -15,12 +15,27 @@ use core::error::{ExitCode, ExitResult};
 use manager::BookmarkManager;
 
 fn main() -> ExitCode {
-    let fallback_file = format!("{HOME}/.local/share/bkmk", HOME = getenv("HOME").unwrap());
-    let bkmk_file = match getenv("BKMK_FILE") {
-        Ok(s) if s.len() == 0 => fallback_file,
+    let home = getenv("HOME").expect("HOME directory is unset - it is needed");
+
+    let cache_dir: String = std::env::var("XDG_CACHE_DIR")
+        .ok()
+        .or_else(|| Some(format!("{}/.cache", home)))
+        .unwrap();
+    let data_dir: String = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .or_else(|| std::env::var("XDG_DATA_DIR").ok())
+        .or_else(|| Some(format!("{}/.local/share", home)))
+        .unwrap();
+
+    let fallback_file = format!("{}/bkmk", data_dir);
+
+    let bkmk_file = match std::env::var("BKMK_FILE") {
         Err(_) => fallback_file,
-        Ok(other) => other,
+        Ok(var) if var.len() == 0 => fallback_file,
+        Ok(var) => var,
     };
+
+    let mutex_file = format!("{}/bkmk-mutex", cache_dir);
 
     let options = cli::Options::parse();
 
@@ -129,7 +144,7 @@ mod subcmd {
                 .join("\n");
 
             match fzagnostic(&format!("Bookmark ({}):", not_archived.len()), &input, 30) {
-                Some(s) => {
+                Ok(s) => {
                     not_archived[s
                         .trim()
                         .split(" ")
@@ -139,7 +154,8 @@ mod subcmd {
                         .unwrap()]
                     .id
                 }
-                None => return ExitResult::SilentErr,
+                Err(e) if e == "" => return ExitResult::SilentErr,
+                Err(e) => return ExitResult::from(e),
             }
         };
 
@@ -157,11 +173,12 @@ mod subcmd {
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            match core::misc::fzagnostic("Action:", &input, 30) {
-                Some(s) => s.split(" ").collect::<Vec<&str>>()[0]
+            match fzagnostic("Action:", &input, 30) {
+                Ok(s) => s.split(" ").collect::<Vec<&str>>()[0]
                     .parse::<usize>()
                     .unwrap(),
-                None => return ExitResult::SilentErr,
+                Err(e) if e == "" => return ExitResult::SilentErr,
+                Err(e) => return ExitResult::from(e),
             }
         };
 
