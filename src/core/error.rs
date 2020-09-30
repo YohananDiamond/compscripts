@@ -6,7 +6,7 @@ use std::process::Termination;
 pub struct ExitCode(pub i32);
 
 impl ExitCode {
-    pub fn and<F>(self, f: F) -> Self
+    pub fn and_then<F>(self, f: F) -> Self
     where
         F: Fn() -> ExitCode,
     {
@@ -14,6 +14,16 @@ impl ExitCode {
             f()
         } else {
             self
+        }
+    }
+
+    pub fn or_else<F>(self, f: F) -> Self
+    where
+        F: Fn(i32) -> ExitCode,
+    {
+        match self.0 {
+            0 => self,
+            other => f(other),
         }
     }
 }

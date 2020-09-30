@@ -82,7 +82,7 @@ fn main() -> ExitCode {
         SubCmd::Menu => subcmd::menu(&mut manager),
     };
 
-    ExitCode::from(result).and(|| {
+    ExitCode::from(result).and_then(|| {
         if let Err(e) = manager.save_if_modified(&path) {
             eprintln!("Failed to save changes to file: {}", e);
             ExitCode(1)
