@@ -27,8 +27,6 @@ mod report {
         Tree,
     }
 
-    // pub mod generators {}
-
     pub fn print_single_item<F>(item: &Item, indentation: usize, f: F)
     where
         F: Fn(&Item) -> bool + Copy,
@@ -177,8 +175,8 @@ fn main() -> ExitCode {
                     return ExitCode(1);
                 }
 
-                // find invalid IDs
-                if let Some(id) = core::misc::get_first_not_on_set(&r, &manager.ref_ids()) {
+                // abort if there's an invalid ID
+                if let Some(id) = manager.get_first_invalid_ref_id(r.iter()) {
                     eprintln!("There is at least one invalid ID ({}) on the selection", id);
                     return ExitCode(1);
                 }
@@ -251,25 +249,8 @@ fn main() -> ExitCode {
                         );
                     }
                     SelectionAction::Delete(args) => {
-                        'proc: loop {
-                            let sel_vec: Vec<&Item> =
-                                r.iter().map(|&id| manager.find(id).unwrap()).collect();
-
-                            if !args.force.unwrap_or(false) {
-                                report::display_report(
-                                    "Tasks to be deleted",
-                                    &sel_vec,
-                                    ReportStyle::Tree,
-                                    |_| true,
-                                );
-
-                                eprintln!("Do you wish to delete these tasks?");
-                                if !core::misc::confirm_with_default(true) {
-                                    break 'proc;
-                                }
-                            }
-
-                            let ids = HashSet::from_iter(r);
+                        fn proceed(manager: &mut ItemManager, ids: Vec<Id>) {
+                            let ids = HashSet::from_iter(ids);
 
                             fn do_the_thing(data: &mut Vec<Item>, ids: &HashSet<Id>) {
                                 let mut i = 0;
@@ -287,7 +268,7 @@ fn main() -> ExitCode {
                                                 do_the_thing(children, ids);
                                             }
 
-                                            // only increment here because, if the task is removed, everything is gonna be moved back
+                                            // only increment here because, if the item is removed, everything is gonna be moved back
                                             i += 1;
                                         }
                                     }
@@ -295,12 +276,64 @@ fn main() -> ExitCode {
                             }
 
                             do_the_thing(manager.data_mut(), &ids);
-
                             manager.after_interact_mut_hook();
 
                             // I don't think IDs need to be freed since the application will close soon
+                        }
 
-                            break 'proc;
+                        if !args.force.unwrap_or(false) {
+                            let sel_vec: Vec<&Item> =
+                                r.iter().map(|&id| manager.find(id).unwrap()).collect();
+
+                            report::display_report(
+                                "Items to be deleted",
+                                &sel_vec,
+                                ReportStyle::Tree,
+                                |_| true,
+                            );
+
+                            eprintln!("Do you wish to delete these items?");
+                            if core::misc::confirm_with_default(true) {
+                                proceed(&mut manager, r.clone());
+                            }
+                        } else {
+                            proceed(&mut manager, r.clone());
+                        }
+                    }
+                    SelectionAction::Swap(args) => {
+                        if r.len() != 2 {
+                            eprintln!("The amount of args should be exactly two (it's {}).", r.len());
+                            return ExitCode(1);
+                        }
+
+                        fn proceed(manager: &mut ItemManager, ids: Vec<Id>) {
+                            unsafe {
+                                let first: *mut Item = manager.find_mut(ids[0]).unwrap();
+                                let second: *mut Item = manager.find_mut(ids[1]).unwrap();
+                                std::ptr::swap(first, second);
+                            }
+
+                            manager.after_interact_mut_hook();
+                        }
+
+                        if !args.force.unwrap_or(false) {
+                            let sel_vec: Vec<&Item> =
+                                r.iter().map(|&id| manager.find(id).unwrap()).collect();
+
+                            report::display_report(
+                                "Items to be swapped",
+                                &sel_vec,
+                                ReportStyle::Shallow,
+                                |_| true,
+                            );
+
+                            eprintln!("Do you wish to swap these items?");
+                            eprintln!("Each item will keep their children.");
+                            if core::misc::confirm_with_default(true) {
+                                proceed(&mut manager, r.clone());
+                            }
+                        } else {
+                            proceed(&mut manager, r.clone());
                         }
                     }
                 }
@@ -327,7 +360,7 @@ fn main() -> ExitCode {
                 .iter()
                 .map(|&i| manager.find(i).unwrap())
                 .collect();
-            report::display_report("All tasks (surface)", &items, ReportStyle::Tree, |i| {
+            report::display_report("All items (surface)", &items, ReportStyle::Tree, |i| {
                 i.state != State::Done
             });
         }

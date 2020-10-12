@@ -207,6 +207,45 @@ impl ItemManager {
         &self.ref_ids
     }
 
+    // Check if `first` and `second` are ref IDs for two sibling items.
+    // Sibling items mean that they either are both on the root, or are both children of the same item
+    // pub fn sibling_ref_ids(&self, first: Id, second: Id) -> bool {
+    //     fn do_it(vec: &[Item], first: Id, second: Id) -> bool {
+    //         if vec.iter().find(|i| i.ref_id )
+
+    //         if vec.iter().find(|i| i.ref_id == first).is_some()
+    //             && vec.iter().find(|i| i.ref_id == second).is_some()
+    //         {
+    //             true
+    //         } else {
+    //             'search: loop {
+    //                 for item in vec {
+    //                     if item.children.is_empty() && do_it(&item.children, first, second) {
+    //                         break 'search true;
+    //                     }
+    //                 }
+
+    //                 break 'search false;
+    //             }
+    //         }
+    //     };
+
+    //     do_it(self.data(), first, second)
+    // }
+
+    pub fn get_first_invalid_ref_id<'a, I>(&self, ids: I) -> Option<Id>
+    where
+        I: Iterator<Item = &'a u32>
+    {
+        for id in ids {
+            if self.find(*id).is_none() {
+                return Some(*id);
+            }
+        }
+
+        None
+    }
+
     // FIXME: not working (why?)
     pub fn mass_modify(&mut self, range: &[Id], m: ItemBatchMod) {
         // TODO: validate context (lowercase, replace spaces with dashes, etc.)

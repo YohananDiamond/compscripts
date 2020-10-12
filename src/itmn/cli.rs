@@ -65,7 +65,9 @@ pub enum SelectionAction {
     #[clap(about = "List matches without showing any children")]
     ListShallow,
     #[clap(aliases = &["del", "rm", "remove"], about = "Delete matches")]
-    Delete(DeleteArgs),
+    Delete(ForceArgs),
+    #[clap(about = "Swap two items")]
+    Swap(ForceArgs),
 }
 
 #[derive(Debug, Clap)]
@@ -83,7 +85,7 @@ pub struct ItemBatchMod {
 }
 
 #[derive(Debug, Clap)]
-pub struct DeleteArgs {
+pub struct ForceArgs {
     #[clap(short, long, about = "Skip warning messages (unsafe)")]
     pub force: Option<bool>,
 }
