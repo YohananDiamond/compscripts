@@ -163,6 +163,7 @@ mod subcmd {
             "open (via $OPENER -> xdg-open)",
             "archive",
             "copy (via xclip)",
+            "delete",
         ];
 
         let chosen_action = {
@@ -224,6 +225,13 @@ mod subcmd {
                     }
                 })
                 .unwrap(),
+            3 => {
+                let pos = manager.data().iter().position(|b| b.id == chosen_id).unwrap();
+                manager.data_mut().swap_remove(pos);
+                manager.after_interact_mut_hook();
+
+                ExitResult::Ok
+            }
             _ => panic!("unknown code"), // TODO: turn this into a not-panic, but just a simple error
         }
     }
