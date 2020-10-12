@@ -5,8 +5,6 @@ use std::hash::Hash;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
-use crate::error::ExitResult;
-
 /// Runs the `fzagnostic` command with data from the arguments.
 ///
 /// Returns Ok with the choice if everything went successfully.
@@ -44,13 +42,25 @@ pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Result<String, Stri
     }
 }
 
-pub fn find_free_value(set: &HashSet<u32>) -> u32 {
+/// Finds the first free value in the set.
+pub fn find_lowest_free_value(set: &HashSet<u32>) -> u32 {
     let mut free_value = 0;
     loop {
         if !set.contains(&free_value) {
             break free_value;
         }
         free_value += 1;
+    }
+}
+
+/// Finds the first free value that is bigger than the highest used value in the set.
+pub fn find_highest_free_value(set: &HashSet<u32>) -> u32 {
+    let free_value = set.iter().fold(0, |x, &y| x.max(y));
+
+    if set.contains(&free_value) {
+        free_value + 1
+    } else {
+        free_value
     }
 }
 

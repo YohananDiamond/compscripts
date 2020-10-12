@@ -62,7 +62,7 @@ impl BookmarkManager {
             }
         }
 
-        let free_id = core::misc::find_free_value(&self.used_ids);
+        let free_id = core::misc::find_lowest_free_value(&self.used_ids);
 
         self.data_mut().push(Bookmark {
             id: free_id,
@@ -84,7 +84,7 @@ impl BookmarkManager {
         url: String,
         read_line: bool, // TODO: document this
     ) -> Result<(), String> {
-        for bookmark in self.data() {
+        for bookmark in self.data() { // TODO: refactor in check_repeated_url()
             if bookmark.url == url {
                 return Err(format!(
                     "repeated url with bookmark #{} ({})",
@@ -108,7 +108,7 @@ impl BookmarkManager {
         .trim()
         .to_string();
 
-        let free_id = core::misc::find_free_value(&self.used_ids);
+        let free_id = core::misc::find_lowest_free_value(&self.used_ids);
 
         eprintln!("New bookmark: {:?} ({:?})", title, url);
 

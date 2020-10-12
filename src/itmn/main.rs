@@ -8,12 +8,14 @@ mod item;
 mod manager;
 
 use cli::*;
-use core::aliases::getenv;
-use core::data::{JsonSerializer, Manager};
+use core::data::{Id, JsonSerializer, Manager};
 use core::error::ExitCode;
 use item::{Item, State};
 use manager::{Error, ItemManager};
 use report::ReportStyle;
+
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 mod report {
     use super::{Item, State};
@@ -27,7 +29,10 @@ mod report {
 
     // pub mod generators {}
 
-    pub fn print_single_item<F: Fn(&Item) -> bool + Copy>(item: &Item, indentation: usize, f: F) {
+    pub fn print_single_item<F>(item: &Item, indentation: usize, f: F)
+    where
+        F: Fn(&Item) -> bool + Copy,
+    {
         if f(item) {
             eprintln!(
                 "{}{} [{:>02}]{} {}",
@@ -49,12 +54,10 @@ mod report {
         }
     }
 
-    pub fn print_item_styled<F: Fn(&Item) -> bool + Copy>(
-        item: &Item,
-        style: ReportStyle,
-        indentation: usize,
-        f: F,
-    ) {
+    pub fn print_item_styled<F>(item: &Item, style: ReportStyle, indentation: usize, f: F)
+    where
+        F: Fn(&Item) -> bool + Copy,
+    {
         let f_result = f(item);
 
         match style {
@@ -97,12 +100,10 @@ mod report {
     }
 
     // TODO: add sort methods
-    pub fn display_report<F: Fn(&Item) -> bool + Copy>(
-        name: &str,
-        report_list: &[&Item],
-        style: ReportStyle,
-        f: F,
-    ) {
+    pub fn display_report<F>(name: &str, report_list: &[&Item], style: ReportStyle, f: F)
+    where
+        F: Fn(&Item) -> bool + Copy,
+    {
         eprintln!("{} | {} selected items", name, report_list.len());
 
         for item in report_list {
@@ -112,8 +113,9 @@ mod report {
 }
 
 fn main() -> ExitCode {
-    let home_path = getenv("HOME").unwrap();
-    let itmn_file = getenv("ITMN_FILE").unwrap_or(format!("{}/.local/share/itmn", home_path));
+    let home_path = std::env::var("HOME").unwrap();
+    let itmn_file =
+        std::env::var("ITMN_FILE").unwrap_or(format!("{}/.local/share/itmn", home_path));
 
     let options = cli::Options::parse();
 
@@ -173,79 +175,132 @@ fn main() -> ExitCode {
                 if r.is_empty() {
                     eprintln!("No selection was specified.");
                     return ExitCode(1);
-                } else {
-                    // find invalid IDs
-                    if let Some(id) = core::misc::get_first_not_on_set(&r, &manager.ref_ids()) {
-                        eprintln!("There is at least one invalid ID ({}) on the selection", id);
-                        return ExitCode(1);
+                }
+
+                // find invalid IDs
+                if let Some(id) = core::misc::get_first_not_on_set(&r, &manager.ref_ids()) {
+                    eprintln!("There is at least one invalid ID ({}) on the selection", id);
+                    return ExitCode(1);
+                }
+
+                match dt.action.unwrap_or(SelectionAction::ListBrief) {
+                    SelectionAction::Modify(m) => {
+                        manager.mass_modify(&r, m);
                     }
+                    SelectionAction::AddChild(dt) => {
+                        if r.len() > 1 {
+                            eprintln!("More than one item was selected. All of them will receive new identical children.");
 
-                    match dt.action.unwrap_or(SelectionAction::ListBrief) {
-                        SelectionAction::Modify(m) => {
-                            manager.mass_modify(&r, m);
+                            if !core::misc::confirm_with_default(false) {
+                                return ExitCode(1);
+                            }
                         }
-                        SelectionAction::AddChild(dt) => {
-                            if r.len() > 1 {
-                                eprintln!("More than one item was selected. All of them will receive new identical children.");
 
-                                if !core::misc::confirm_with_default(false) {
-                                    return ExitCode(1);
+                        for id in r {
+                            manager
+                                .add_child_to_ref_id(
+                                    id,
+                                    dt.name.clone(),
+                                    dt.context.clone(),
+                                    match dt.note {
+                                        Some(false) | None => State::Todo,
+                                        Some(true) => State::Note,
+                                    },
+                                    Vec::new(),
+                                )
+                                .unwrap();
+                        }
+                    }
+                    SelectionAction::Done => {
+                        for id in r {
+                            manager.interact_mut(id, |i| {
+                                if let State::Todo = i.state {
+                                    i.state = State::Done;
+                                }
+                            });
+                        }
+                    }
+                    SelectionAction::ListTree => {
+                        let sel_vec: Vec<&Item> =
+                            r.iter().map(|&id| manager.find(id).unwrap()).collect();
+
+                        report::display_report("Tree listing", &sel_vec, ReportStyle::Tree, |_| {
+                            true
+                        });
+                    }
+                    SelectionAction::ListBrief => {
+                        let sel_vec: Vec<&Item> =
+                            r.iter().map(|&id| manager.find(id).unwrap()).collect();
+
+                        report::display_report(
+                            "Tree listing",
+                            &sel_vec,
+                            ReportStyle::Brief,
+                            |_| true,
+                        );
+                    }
+                    SelectionAction::ListShallow => {
+                        let sel_vec: Vec<&Item> =
+                            r.iter().map(|&id| manager.find(id).unwrap()).collect();
+
+                        report::display_report(
+                            "Tree listing",
+                            &sel_vec,
+                            ReportStyle::Shallow,
+                            |_| true,
+                        );
+                    }
+                    SelectionAction::Delete(args) => {
+                        'proc: loop {
+                            let sel_vec: Vec<&Item> =
+                                r.iter().map(|&id| manager.find(id).unwrap()).collect();
+
+                            if !args.force.unwrap_or(false) {
+                                report::display_report(
+                                    "Tasks to be deleted",
+                                    &sel_vec,
+                                    ReportStyle::Tree,
+                                    |_| true,
+                                );
+
+                                eprintln!("Do you wish to delete these tasks?");
+                                if !core::misc::confirm_with_default(true) {
+                                    break 'proc;
                                 }
                             }
 
-                            for id in r {
-                                manager
-                                    .add_child_to_ref_id(
-                                        id,
-                                        dt.name.clone(),
-                                        dt.context.clone(),
-                                        match dt.note {
-                                            Some(false) | None => State::Todo,
-                                            Some(true) => State::Note,
-                                        },
-                                        Vec::new(),
-                                    )
-                                    .unwrap();
-                            }
-                        }
-                        SelectionAction::Done => {
-                            for id in r {
-                                manager.interact_mut(id, |i| {
-                                    if let State::Todo = i.state {
-                                        i.state = State::Done;
+                            let ids = HashSet::from_iter(r);
+
+                            fn do_the_thing(data: &mut Vec<Item>, ids: &HashSet<Id>) {
+                                let mut i = 0;
+                                while i < data.len() {
+                                    if let Some(id) = data[i].ref_id {
+                                        if ids.contains(&id) {
+                                            // this will move the item at the end of the vector to the current position, which I don't
+                                            // think is a problem, since we're not gonna increase i if the deletion happens
+                                            data.swap_remove(i);
+                                        } else {
+                                            // do the same operation to the children, if there's any
+                                            let children = &mut data[i].children;
+
+                                            if children.len() > 0 {
+                                                do_the_thing(children, ids);
+                                            }
+
+                                            // only increment here because, if the task is removed, everything is gonna be moved back
+                                            i += 1;
+                                        }
                                     }
-                                });
+                                }
                             }
-                        }
-                        SelectionAction::ListTree => {
-                            let sel_vec: Vec<&Item> =
-                                r.iter().map(|id| manager.find(*id).unwrap()).collect();
-                            report::display_report(
-                                "Tree listing",
-                                &sel_vec,
-                                ReportStyle::Tree,
-                                |_| true,
-                            );
-                        }
-                        SelectionAction::ListBrief => {
-                            let sel_vec: Vec<&Item> =
-                                r.iter().map(|id| manager.find(*id).unwrap()).collect();
-                            report::display_report(
-                                "Tree listing",
-                                &sel_vec,
-                                ReportStyle::Brief,
-                                |_| true,
-                            );
-                        }
-                        SelectionAction::ListShallow => {
-                            let sel_vec: Vec<&Item> =
-                                r.iter().map(|id| manager.find(*id).unwrap()).collect();
-                            report::display_report(
-                                "Tree listing",
-                                &sel_vec,
-                                ReportStyle::Shallow,
-                                |_| true,
-                            );
+
+                            do_the_thing(manager.data_mut(), &ids);
+
+                            manager.after_interact_mut_hook();
+
+                            // I don't think IDs need to be freed since the application will close soon
+
+                            break 'proc;
                         }
                     }
                 }

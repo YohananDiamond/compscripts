@@ -22,7 +22,7 @@ pub enum SubCmd {
     Next,
     #[clap(about = "Add an item")]
     Add(ItemAddDetails),
-    #[clap(alias = "sel", about = "Select items by ID and do something with them")]
+    #[clap(aliases = &["s", "sri"], about = "Select items by ID and do something with them")]
     SelRefID(SelectionDetails),
     // TODO: SelInternalID(SelectionDetails),
     // TODO: Search,
@@ -60,11 +60,12 @@ pub enum SelectionAction {
     Done,
     #[clap(alias = "tree", about = "List matches in a tree")]
     ListTree,
-    #[clap(aliases = &["ls", "list"], about = "List matches, showing only the first child of each, if any")]
+    #[clap(aliases = &["l", "ls", "list"], about = "List matches, showing only the first child of each, if any")]
     ListBrief,
     #[clap(about = "List matches without showing any children")]
     ListShallow,
-    // TODO: Delete(DelArgs), // TODO: --force/-f option
+    #[clap(aliases = &["del", "rm", "remove"], about = "Delete matches")]
+    Delete(DeleteArgs),
 }
 
 #[derive(Debug, Clap)]
@@ -79,4 +80,10 @@ pub struct ItemBatchMod {
     pub context: Option<String>,
     #[clap(short, long, about = "The item's new type")]
     pub note: Option<bool>,
+}
+
+#[derive(Debug, Clap)]
+pub struct DeleteArgs {
+    #[clap(short, long, about = "Skip warning messages (unsafe)")]
+    pub force: Option<bool>,
 }

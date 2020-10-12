@@ -106,7 +106,7 @@ impl ItemManager {
                 State::Done => (),
                 State::Todo | State::Note => {
                     if item.ref_id.is_none() {
-                        item.ref_id = Some(core::misc::find_free_value(&ref_set));
+                        item.ref_id = Some(core::misc::find_lowest_free_value(&ref_set));
                     }
                 }
             }
@@ -128,10 +128,10 @@ impl ItemManager {
         children: Vec<Item>,
     ) {
         // Might crash with an overflow but seriously, who is gonna have 4,294,967,296 items in a lifetime?
-        let free_ref_id = core::misc::find_free_value(&self.ref_ids);
+        let free_ref_id = core::misc::find_lowest_free_value(&self.ref_ids);
         self.ref_ids.insert(free_ref_id);
 
-        let free_internal_id = core::misc::find_free_value(&self.internal_ids);
+        let free_internal_id = core::misc::find_highest_free_value(&self.internal_ids);
         self.internal_ids.insert(free_internal_id);
 
         self.data.push(
@@ -157,10 +157,10 @@ impl ItemManager {
         state: State,
         children: Vec<Item>,
     ) -> Result<(), ()> {
-        let free_ref_id = core::misc::find_free_value(&self.ref_ids);
+        let free_ref_id = core::misc::find_lowest_free_value(&self.ref_ids);
         self.ref_ids.insert(free_ref_id);
 
-        let free_internal_id = core::misc::find_free_value(&self.internal_ids);
+        let free_internal_id = core::misc::find_highest_free_value(&self.internal_ids);
         self.internal_ids.insert(free_internal_id);
 
         let result = if let Some(i) = self.find_mut(ref_id) {

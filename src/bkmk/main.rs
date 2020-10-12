@@ -35,7 +35,7 @@ fn main() -> ExitCode {
         Ok(var) => var,
     };
 
-    let mutex_file = format!("{}/bkmk-mutex", cache_dir);
+    let _mutex_file = format!("{}/bkmk-mutex", cache_dir);
 
     let options = cli::Options::parse();
 
