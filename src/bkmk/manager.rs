@@ -48,6 +48,28 @@ impl BookmarkManager {
         })
     }
 
+    pub fn already_has_url(&self, url: &str) -> Option<Id> {
+        let check_repeated = |url: &str| -> Option<Id> {
+            for bookmark in self.data() {
+                if bookmark.url == url {
+                    return Some(bookmark.id);
+                }
+            }
+
+            None
+        };
+
+        check_repeated(url).or_else(|| {
+            if url.chars().nth(url.len() - 1).unwrap() == '/' {
+                // remove trailing slash
+                check_repeated(&url[0..(url.len() - 1)])
+            } else {
+                // add trailing slash
+                check_repeated(&format!("{}/", url))
+            }
+        })
+    }
+
     /// Adds a bookmark to the database.
     /// Returns an error if a bookmark with the same url already exists.
     pub fn add_bookmark(
@@ -56,10 +78,8 @@ impl BookmarkManager {
         url: String,
         tags: Vec<String>,
     ) -> Result<(), String> {
-        for bookmark in self.data() {
-            if bookmark.url == url {
-                return Err(format!("Repeated url with bookmark #{}", bookmark.id));
-            }
+        if let Some(id) = self.already_has_url(&url) {
+            return Err(format!("Repeated url with bookmark #{}", id));
         }
 
         let free_id = core::misc::find_lowest_free_value(&self.used_ids);
@@ -84,13 +104,8 @@ impl BookmarkManager {
         url: String,
         read_line: bool, // TODO: document this
     ) -> Result<(), String> {
-        for bookmark in self.data() { // TODO: refactor in check_repeated_url()
-            if bookmark.url == url {
-                return Err(format!(
-                    "repeated url with bookmark #{} ({})",
-                    bookmark.id, url
-                ));
-            }
+        if let Some(id) = self.already_has_url(&url) {
+            return Err(format!("Repeated url with bookmark #{} ({})", id, url));
         }
 
         let title = match crate::bookmark::url_get_title(&url) {
