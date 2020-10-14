@@ -22,8 +22,9 @@ pub enum SubCmd {
     Next,
     #[clap(about = "Add an item")]
     Add(ItemAddDetails),
-    #[clap(aliases = &["s", "sri"], about = "Select items by ID and do something with them")]
+    #[clap(aliases = &["s", "sel", "sri"], about = "Select items by refrence ID and do something with them")]
     SelRefID(SelectionDetails),
+    // #[clap(aliases = &["sel-internal", "sii"], about = "Select items by internal ID and do something with them")]
     // TODO: SelInternalID(SelectionDetails),
     // TODO: Search,
     // TODO: RegexMatch,
@@ -68,6 +69,8 @@ pub enum SelectionAction {
     Delete(ForceArgs),
     #[clap(about = "Swap two items")]
     Swap(ForceArgs),
+    #[clap(alias = "chown", about = "Change ownership of a task")]
+    ChangeOwnership(ChownArgs),
 }
 
 #[derive(Debug, Clap)]
@@ -88,4 +91,10 @@ pub struct ItemBatchMod {
 pub struct ForceArgs {
     #[clap(short, long, about = "Skip warning messages (unsafe)")]
     pub force: Option<bool>,
+}
+
+#[derive(Debug, Clap)]
+pub struct ChownArgs {
+    #[clap(about = "the new owner of the task. Should be .ROOT, a reference ID, or an internal ID - prefixed by i")]
+    pub new_owner: String,
 }

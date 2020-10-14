@@ -25,10 +25,12 @@ pub struct ItemManager {
 impl Manager for ItemManager {
     type Data = Item;
 
+    #[inline(always)]
     fn data(&self) -> &[Self::Data] {
         &self.data
     }
 
+    #[inline(always)]
     fn data_mut(&mut self) -> &mut Vec<Self::Data> {
         &mut self.data
     }
@@ -207,6 +209,29 @@ impl ItemManager {
         &self.ref_ids
     }
 
+    pub fn try_remove(&mut self, ref_id: Id) -> Option<Item> {
+        fn inner(items: &mut Vec<Item>, ref_id: Id) -> Option<Item> {
+            let mut i = 0;
+
+            while i < items.len() {
+                if items[i].ref_id == Some(ref_id) {
+                    // FIXME: should this really be O(n)?
+                    return Some(items.remove(i));
+                }
+
+                if let Some(item) = inner(&mut items[i].children, ref_id) {
+                    return Some(item);
+                }
+
+                i += 1;
+            }
+
+            None
+        }
+
+        inner(self.data_mut(), ref_id)
+    }
+
     // Check if `first` and `second` are ref IDs for two sibling items.
     // Sibling items mean that they either are both on the root, or are both children of the same item
     // pub fn sibling_ref_ids(&self, first: Id, second: Id) -> bool {
@@ -235,7 +260,7 @@ impl ItemManager {
 
     pub fn get_first_invalid_ref_id<'a, I>(&self, ids: I) -> Option<Id>
     where
-        I: Iterator<Item = &'a u32>
+        I: Iterator<Item = &'a u32>,
     {
         for id in ids {
             if self.find(*id).is_none() {
@@ -244,6 +269,44 @@ impl ItemManager {
         }
 
         None
+    }
+
+    pub fn find_internal(&self, internal_id: Id) -> Option<&<Self as Manager>::Data> {
+        fn f(items: &[Item], internal_id: Id) -> Option<&Item> {
+            for i in items {
+                if i.internal_id == internal_id {
+                    return Some(i);
+                }
+
+                let find_result = f(&i.children, internal_id);
+                if find_result.is_some() {
+                    return find_result;
+                }
+            }
+
+            None
+        }
+
+        f(self.data(), internal_id)
+    }
+
+    pub fn find_internal_mut(&mut self, internal_id: Id) -> Option<&mut <Self as Manager>::Data> {
+        fn f(items: &mut [Item], internal_id: Id) -> Option<&mut Item> {
+            for i in items.iter_mut() {
+                if i.internal_id == internal_id {
+                    return Some(i);
+                }
+
+                let find_result = f(&mut i.children, internal_id);
+                if find_result.is_some() {
+                    return find_result;
+                }
+            }
+
+            None
+        }
+
+        f(self.data_mut(), internal_id)
     }
 
     // FIXME: not working (why?)

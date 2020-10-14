@@ -17,6 +17,7 @@ use report::ReportStyle;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
+// TODO: refactor into a struct, with settings like indentation and etc.
 mod report {
     use super::{Item, State};
 
@@ -27,11 +28,11 @@ mod report {
         Tree,
     }
 
-    pub fn print_single_item<F>(item: &Item, indentation: usize, f: F)
+    pub fn print_single_item<F>(item: &Item, indentation: usize, func: F)
     where
         F: Fn(&Item) -> bool + Copy,
     {
-        if f(item) {
+        if func(item) {
             eprintln!(
                 "{}{} [{:>02}]{} {}",
                 std::iter::repeat(' ')
@@ -52,29 +53,28 @@ mod report {
         }
     }
 
-    pub fn print_item_styled<F>(item: &Item, style: ReportStyle, indentation: usize, f: F)
+    pub fn print_item_styled<F>(item: &Item, style: ReportStyle, indentation: usize, func: F)
     where
         F: Fn(&Item) -> bool + Copy,
     {
-        let f_result = f(item);
+        let func_result = func(item);
 
         match style {
             ReportStyle::Shallow => {
-                print_single_item(item, indentation, f);
+                print_single_item(item, indentation, func);
             }
             ReportStyle::Brief => {
-                print_single_item(item, indentation, f);
+                print_single_item(item, indentation, func);
 
-                if f_result {
+                if func_result {
                     if !item.children.is_empty() {
                         print_item_styled(
                             &item.children[0],
                             ReportStyle::Shallow,
                             indentation + 1,
-                            f,
+                            func,
                         );
-                    }
-                    if item.children.len() > 1 {
+                    } else if item.children.len() > 1 {
                         eprintln!(
                             "{}  {} more...",
                             std::iter::repeat(' ')
@@ -86,11 +86,11 @@ mod report {
                 }
             }
             ReportStyle::Tree => {
-                print_single_item(item, indentation, f);
+                print_single_item(item, indentation, func);
 
-                if f_result {
+                if func_result {
                     for child in &item.children {
-                        print_item_styled(&child, ReportStyle::Tree, indentation + 1, f);
+                        print_item_styled(&child, ReportStyle::Tree, indentation + 1, func);
                     }
                 }
             }
@@ -302,11 +302,14 @@ fn main() -> ExitCode {
                     }
                     SelectionAction::Swap(args) => {
                         if r.len() != 2 {
-                            eprintln!("The amount of args should be exactly two (it's {}).", r.len());
+                            eprintln!(
+                                "The amount of args should be exactly two (it's {}).",
+                                r.len()
+                            );
                             return ExitCode(1);
                         }
 
-                        fn proceed(manager: &mut ItemManager, ids: Vec<Id>) {
+                        fn proceed(manager: &mut ItemManager, ids: &[Id]) {
                             unsafe {
                                 let first: *mut Item = manager.find_mut(ids[0]).unwrap();
                                 let second: *mut Item = manager.find_mut(ids[1]).unwrap();
@@ -330,10 +333,105 @@ fn main() -> ExitCode {
                             eprintln!("Do you wish to swap these items?");
                             eprintln!("Each item will keep their children.");
                             if core::misc::confirm_with_default(true) {
-                                proceed(&mut manager, r.clone());
+                                proceed(&mut manager, &r);
                             }
                         } else {
-                            proceed(&mut manager, r.clone());
+                            proceed(&mut manager, &r);
+                        }
+                    }
+                    SelectionAction::ChangeOwnership(args) => {
+                        enum NewOwner {
+                            Root,
+                            ByInternal(Id),
+                            ByRef(Id),
+                        }
+
+                        fn proceed(manager: &mut ItemManager, ids: &[Id], target: NewOwner) {
+                            let items = ids
+                                .iter()
+                                .map(|&id| manager.try_remove(id).unwrap())
+                                .collect::<Vec<Item>>();
+
+                            match target {
+                                NewOwner::Root => manager.data_mut().extend(items),
+                                NewOwner::ByRef(id) => {
+                                    let owner = manager.find_mut(id).unwrap();
+                                    owner.children.extend(items);
+                                }
+                                NewOwner::ByInternal(id) => {
+                                    let owner = manager.find_internal_mut(id).unwrap();
+                                    owner.children.extend(items);
+                                }
+                            }
+
+                            manager.after_interact_mut_hook();
+                        }
+
+                        fn confirm_and_proceed(
+                            manager: &mut ItemManager,
+                            ids: &[Id],
+                            target: NewOwner,
+                        ) {
+                            let items = ids
+                                .iter()
+                                .map(|&id| manager.find(id).unwrap())
+                                .collect::<Vec<&Item>>();
+
+                            report::display_report(
+                                "Items to be moved",
+                                &items,
+                                ReportStyle::Shallow,
+                                |_| true,
+                            );
+
+                            // TODO: prevent the new owner from being in the selection
+                            // TODO: prevent a selected item from being a child of another selected item (for now)
+
+                            match target {
+                                NewOwner::Root => eprintln!("New ownership: ROOT"),
+                                NewOwner::ByInternal(id) => eprintln!(
+                                    "New ownership: [i{}] {}",
+                                    id,
+                                    manager.find_internal(id).unwrap().name
+                                ),
+                                NewOwner::ByRef(id) => eprintln!(
+                                    "New ownership: [{}] {}",
+                                    id,
+                                    manager.find(id).unwrap().name
+                                ),
+                            }
+
+                            eprintln!("Do you wish to change the ownership of these items?");
+                            eprintln!("Each item will keep its children.");
+                            if core::misc::confirm_with_default(true) {
+                                proceed(manager, ids, target);
+                            }
+                        }
+
+                        if args.new_owner == ".ROOT" {
+                            confirm_and_proceed(&mut manager, &r, NewOwner::Root);
+                        } else if let Some('i') = args.new_owner.chars().nth(0) {
+                            if let Ok(id) = (&args.new_owner[1..]).parse::<Id>() {
+                                if manager.find_internal(id).is_some() {
+                                    confirm_and_proceed(&mut manager, &r, NewOwner::ByInternal(id));
+                                } else {
+                                    eprintln!("Couldn't find task with internal ID #{}", id);
+                                    return ExitCode(1);
+                                }
+                            } else {
+                                eprintln!("Failed to parse internal ID - invalid number after first character: {:?}", &args.new_owner[1..]);
+                                return ExitCode(1);
+                            }
+                        } else if let Ok(id) = args.new_owner.parse::<Id>() {
+                            if manager.find(id).is_some() {
+                                confirm_and_proceed(&mut manager, &r, NewOwner::ByRef(id));
+                            } else {
+                                eprintln!("Couldn't find task with ref ID #{}", id);
+                                return ExitCode(1);
+                            }
+                        } else {
+                            eprintln!("Failed to parse new-owner argument: {:?}", args.new_owner);
+                            return ExitCode(1);
                         }
                     }
                 }
