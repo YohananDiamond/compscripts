@@ -55,8 +55,8 @@ pub struct SelectionDetails {
 pub enum SelectionAction {
     #[clap(alias = "mod", about = "Modify the matches")]
     Modify(ItemBatchMod),
-    #[clap(aliases = &["sub"], about = "Add a child to each one of the matches")]
-    AddChild(ItemAddDetails), // TODO: require confirmation if the amount of items selected is more than one.
+    #[clap(aliases = &["ac"], about = "Add a child to each one of the matches")]
+    Add(ItemAddDetails), // TODO: require confirmation if the amount of items selected is more than one.
     #[clap(about = "Mark the matches as DONE, if their states are TODO")]
     Done,
     #[clap(alias = "tree", about = "List matches in a tree")]

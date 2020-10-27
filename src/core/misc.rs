@@ -23,7 +23,10 @@ pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Result<String, Stri
             let stdin = child.stdin.as_mut().unwrap();
 
             if let Err(e) = write!(stdin, "{}", input) {
-                Err(format!("fzagnostic: failed to write to process stdin: {}", e))
+                Err(format!(
+                    "fzagnostic: failed to write to process stdin: {}",
+                    e
+                ))
             } else {
                 if child.wait().unwrap().success() {
                     let mut choice = String::new();
@@ -36,9 +39,7 @@ pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Result<String, Stri
                 }
             }
         }
-        Err(e) => {
-            Err(format!("fzagnostic: failed to run command: {}", e))
-        }
+        Err(e) => Err(format!("fzagnostic: failed to run command: {}", e)),
     }
 }
 
@@ -125,12 +126,13 @@ pub fn confirm_with_default(default: bool) -> bool {
             "Confirm? [{}] ",
             if default { "Y/n" } else { "y/N" }
         ))
-        .unwrap();
+        .unwrap()
+        .to_lowercase();
 
         match input.as_str() {
             "" => break default,
-            "y" | "Y" => break true,
-            "n" | "N" => break false,
+            "y" | "yes" => break true,
+            "n" | "no" => break false,
             _ => (),
         }
     }

@@ -63,6 +63,44 @@ pub trait Manager {
     fn after_interact_mut_hook(&mut self);
 }
 
+pub mod data_serialize {
+    use std::io;
+    use std::path::Path;
+
+    use super::{
+        Deserialize, Serialize,
+        JsonError,
+    };
+
+    pub fn import<'a, T>(string: &'a str) -> Result<Vec<T>, JsonError>
+    where
+        T: Deserialize<'a> + Serialize,
+    {
+        serde_json::from_str(string)
+    }
+
+    pub fn export<'a, T>(data: &'a [T], prettified: bool) -> String
+    where
+        T: Deserialize<'a> + Serialize,
+    {
+        if prettified {
+            // TODO: see if this unwrap is really safe
+            serde_json::to_string_pretty(data).unwrap()
+        } else {
+            // TODO: see if this unwrap is really safe
+            serde_json::to_string(data).unwrap()
+        }
+    }
+
+    pub fn save_to_file<'a, T>(data: &'a [T], file: &'a Path, prettified: bool) -> Result<(), io::Error>
+    where
+        T: Deserialize<'a> + Serialize,
+    {
+        let export_string = export(data, prettified);
+        std::fs::write(file, &export_string)
+    }
+}
+
 pub trait JsonSerializer<'a>: Manager
 where
     <Self as Manager>::Data: Deserialize<'a> + Serialize,

@@ -1,4 +1,4 @@
-use core::data::{Id, Searchable};
+use core::data::Searchable;
 
 use serde::{Deserialize, Serialize};
 
@@ -13,9 +13,9 @@ pub enum State {
 pub struct Item {
     /// None means that this task doesn't have a reference ID. This only happens to completed tasks.
     /// TODO: finish doc for this
-    pub ref_id: Option<Id>,
+    pub ref_id: Option<u32>,
     /// The ID for internal representation, and also for managing hidden tasks (such as the "hidden" ones).
-    pub internal_id: Id,
+    pub internal_id: u32,
     /// The name of the Item.
     pub name: String,
     /// The context of the item, GTD-style.
@@ -42,7 +42,7 @@ impl PartialOrd for Item {
 }
 
 impl Searchable for Item {
-    fn ref_id(&self) -> Option<Id> {
+    fn ref_id(&self) -> Option<u32> {
         self.ref_id
     }
 }
