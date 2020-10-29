@@ -110,8 +110,8 @@ fn main() -> ExitCode {
 
 fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<ProgramResult, String> {
     manager.add_item_on_root(
-        args.name,
-        args.context,
+        &args.name,
+        &args.context.unwrap_or(String::new()),
         match args.note {
             Some(false) | None => State::Todo,
             Some(true) => State::Note,
@@ -174,12 +174,12 @@ fn subcmd_selection(
 
     let range = match core::misc::parse_range_str(&args.range) {
         Ok(vec) => {
-            // Check if empty
+            // check if empty
             if vec.is_empty() {
                 return Err("no selection was specified".into());
             }
 
-            // Abort if there's an invalid ID
+            // abort if there's an invalid ID
             if let Some(missing) = manager.first_invalid_ref_id(vec.iter()) {
                 return Err(format!(
                     "there's at least one invalid ID (#{}) on the selection",
@@ -198,31 +198,8 @@ fn subcmd_selection(
         SelAct::Modify(sargs) => {
             let proceed = |manager: &mut ItemManager| {
                 for &id in &range {
-                    manager.interact_mut(RefId(id), |item| {
-                        if let Some(name) = &sargs.name {
-                            item.name = name.clone();
-                        }
-
-                        if let Some(context) = &sargs.context {
-                            if context.is_empty() {
-                                item.context = None;
-                            } else {
-                                item.context = Some(context.clone());
-                                // TODO: validate context (as Item.validated()) or something
-                            }
-                        }
-
-                        if let Some(note) = sargs.note {
-                            if note {
-                                item.state = State::Note;
-                            } else {
-                                // only change to active/pending if item is actually a note
-                                if let State::Note = item.state {
-                                    item.state = State::Todo;
-                                }
-                            }
-                        }
-                    });
+                    // Now that I think of it, cloning the same thing over and over might be too expensive. But I don't know if it's better to try something like Rc to improve this.
+                    manager.interact_mut(RefId(id), |item| sargs.clone().mod_item(item));
                 }
 
                 Ok(ProgramResult {
@@ -277,8 +254,11 @@ fn subcmd_selection(
                     manager
                         .add_child(
                             RefId(*id),
-                            sargs.name.clone(),
-                            sargs.context.clone(),
+                            &sargs.name,
+                            match sargs.context.as_ref() {
+                                Some(sref) => sref,
+                                None => "",
+                            },
                             match sargs.note {
                                 Some(false) | None => State::Todo,
                                 Some(true) => State::Note,

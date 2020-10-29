@@ -1,5 +1,5 @@
-use std::path::Path;
 use std::collections::HashSet;
+use std::path::Path;
 
 use crate::item::{Item, State};
 
@@ -159,7 +159,11 @@ impl ItemManager {
         let mut ref_set: HashSet<u32> = HashSet::new();
         let mut in_set: HashSet<u32> = HashSet::new();
 
-        fn travel(data: &Vec<Item>, ref_set: &mut HashSet<u32>, in_set: &mut HashSet<u32>) -> Result<(), Error> {
+        fn travel(
+            data: &Vec<Item>,
+            ref_set: &mut HashSet<u32>,
+            in_set: &mut HashSet<u32>,
+        ) -> Result<(), Error> {
             for item in data {
                 // add RefID
                 if let Some(id) = item.ref_id {
@@ -226,8 +230,8 @@ impl ItemManager {
 
     pub fn add_item_on_root(
         &mut self,
-        name: String,
-        context: Option<String>,
+        name: &str,
+        context: &str,
         state: State,
         children: Vec<Item>,
     ) {
@@ -239,27 +243,27 @@ impl ItemManager {
         self.internal_ids.insert(free_internal_id);
 
         self.data.push(
-            Item {
-                ref_id: Some(free_ref_id),
-                internal_id: free_internal_id,
-                name: name,
-                context: context,
-                state: state,
-                children: children,
-            }
-            .normalize(),
+            Item::new(
+                Some(free_ref_id),
+                free_internal_id,
+                name,
+                context,
+                state,
+                children,
+            ),
         );
     }
 
     pub fn add_child<T>(
         &mut self,
         query: T,
-        name: String,
-        context: Option<String>,
+        name: &str,
+        context: &str,
         state: State,
         children: Vec<Item>,
     ) -> Result<(), ()>
-        where Self: Searchable<T, Data = Item>,
+    where
+        Self: Searchable<T, Data = Item>,
     {
         let free_ref_id = core::misc::find_lowest_free_value(self.ref_ids());
         self.ref_ids.insert(free_ref_id);
@@ -269,15 +273,14 @@ impl ItemManager {
 
         if let Some(i) = self.find_mut(query) {
             i.children.push(
-                Item {
-                    ref_id: Some(free_ref_id),
-                    internal_id: free_internal_id,
-                    name: name,
-                    context: context,
-                    state: state,
-                    children: children,
-                }
-                .normalize(),
+                Item::new(
+                    Some(free_ref_id),
+                    free_internal_id,
+                    name,
+                    context,
+                    state,
+                    children,
+                ),
             );
             Ok(())
         } else {
@@ -286,7 +289,10 @@ impl ItemManager {
     }
 
     pub fn surface_ref_ids(&self) -> Vec<RefId> {
-        self.data.iter().filter_map(|i| i.ref_id.and_then(|id| Some(RefId(id)))).collect()
+        self.data
+            .iter()
+            .filter_map(|i| i.ref_id.and_then(|id| Some(RefId(id))))
+            .collect()
     }
 
     // pub fn get_all_ref_ids(&self) -> Vec<RefId> {}

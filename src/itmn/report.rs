@@ -24,7 +24,7 @@ impl ReportManager {
                 State::Note => '-',
             },
             item.ref_id.unwrap_or(item.internal_id),
-            match &item.context {
+            match item.context() {
                 Some(c) => format!(" @{}", c),
                 None => String::new(),
             },

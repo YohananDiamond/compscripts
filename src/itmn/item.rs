@@ -19,7 +19,7 @@ pub struct Item {
     /// The name of the Item.
     pub name: String,
     /// The context of the item, GTD-style.
-    pub context: Option<String>,
+    context: Option<String>,
     /// The state of the item (note, todo, done etc.)
     pub state: State,
     /// The children of this item.
@@ -48,18 +48,64 @@ impl Searchable for Item {
 }
 
 impl Item {
-    pub fn normalize(self) -> Self {
-        let new_name = self.name.chars().filter(|&c| c != '\n').collect();
-        let new_context = if let Some(ctx) = self.context {
-            Some(ctx.chars().filter(|&c| c == '\n').collect())
-        } else {
-            None
-        };
-
+    pub fn new(
+        ref_id: Option<u32>,
+        internal_id: u32,
+        name: &str,
+        context: &str, // we're gonna have to copy anyways... :v
+        state: State,
+        children: Vec<Item>,
+    ) -> Self {
         Self {
-            name: new_name,
-            context: new_context,
-            ..self
+            ref_id,
+            internal_id,
+            name: Self::validate_name(name),
+            context: Self::validate_context(context),
+            state,
+            children,
         }
+    }
+
+    pub fn context_translates_to_null(string: &str) -> bool {
+        matches!(string.to_lowercase().as_str(), ".void" | ".none" | "")
+    }
+
+    fn validate_context(context: &str) -> Option<String> {
+        if Self::context_translates_to_null(&context) {
+            None
+        } else {
+            Some(context.chars().filter(|&c| validate_char(c)).collect())
+        }
+    }
+
+    fn validate_name(name: &str) -> String {
+        name.chars().filter(|&c| validate_char(c)).collect()
+    }
+
+    #[inline]
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    #[inline]
+    pub fn set_name(&mut self, new_name: &str) {
+        self.name = Self::validate_name(new_name);
+    }
+
+    #[inline]
+    pub fn context(&self) -> Option<&str> {
+        Some(self.context.as_ref()?.as_str())
+    }
+
+    #[inline]
+    pub fn set_context(&mut self, new_context: &str) {
+        self.context = Self::validate_context(new_context);
+    }
+}
+
+fn validate_char(c: char) -> bool {
+    match c {
+        '\n' | '\t' | '\r' => false,
+        _ => true,
     }
 }

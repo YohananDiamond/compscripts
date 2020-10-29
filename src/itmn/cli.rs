@@ -1,5 +1,7 @@
 use clap::Clap;
 
+use crate::item::{Item, State};
+
 #[derive(Debug, Clap)]
 pub struct Options {
     #[clap(
@@ -73,7 +75,7 @@ pub enum SelectionAction {
     ChangeOwnership(ChownArgs),
 }
 
-#[derive(Debug, Clap)]
+#[derive(Debug, Clap, Clone)]
 pub struct ItemBatchMod {
     #[clap(about = "The item's new name")]
     pub name: Option<String>,
@@ -96,7 +98,11 @@ impl ItemBatchMod {
         }
 
         if let Some(ctx) = &self.context {
-            vec.push(format!("Change context to {:?}", ctx));
+            vec.push(if Item::context_translates_to_null(ctx) {
+                "Remove context".into()
+            } else {
+                format!("Change context to {:?}", ctx)
+            });
         }
 
         if let Some(note) = self.note {
@@ -108,6 +114,27 @@ impl ItemBatchMod {
         }
 
         vec
+    }
+
+    pub fn mod_item(self, item: &mut Item) {
+        if let Some(name) = self.name {
+            item.name = name;
+        }
+
+        if let Some(context) = self.context {
+            item.set_context(&context);
+        }
+
+        if let Some(note) = self.note {
+            if note {
+                item.state = State::Note;
+            } else {
+                // only change to active/pending if item is actually a note
+                if let State::Note = item.state {
+                    item.state = State::Todo;
+                }
+            }
+        }
     }
 }
 
