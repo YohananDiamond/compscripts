@@ -40,12 +40,14 @@ impl ReportManager {
 
         match style {
             ReportStyle::Shallow => {
-                self.print_single_item(item, indent);
+                if filter_result {
+                    self.print_single_item(item, indent);
+                }
             }
             ReportStyle::Brief => {
-                self.print_single_item(item, indent);
-
                 if filter_result {
+                    self.print_single_item(item, indent);
+
                     if item.children.len() > 0 {
                         self.print_item_styled(
                             &item.children[0],
@@ -67,9 +69,9 @@ impl ReportManager {
                 }
             }
             ReportStyle::Tree => {
-                self.print_single_item(item, indent);
-
                 if filter_result {
+                    self.print_single_item(item, indent);
+
                     for child in &item.children {
                         self.print_item_styled(&child, ReportStyle::Tree, indent + 1, filter);
                     }

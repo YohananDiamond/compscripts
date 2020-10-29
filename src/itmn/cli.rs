@@ -87,6 +87,30 @@ pub struct ItemBatchMod {
     pub note: Option<bool>,
 }
 
+impl ItemBatchMod {
+    pub fn modifications_description(&self) -> Vec<String> {
+        let mut vec = Vec::new();
+
+        if let Some(name) = &self.name {
+            vec.push(format!("Change name to {:?}", name));
+        }
+
+        if let Some(ctx) = &self.context {
+            vec.push(format!("Change context to {:?}", ctx));
+        }
+
+        if let Some(note) = self.note {
+            if note {
+                vec.push("Transform into a note".into());
+            } else {
+                vec.push("Transform into an actionable item (task)".into());
+            }
+        }
+
+        vec
+    }
+}
+
 #[derive(Debug, Clap)]
 pub struct ForceArgs {
     #[clap(short, long, about = "Skip warning messages (unsafe)")]

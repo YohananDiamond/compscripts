@@ -14,7 +14,7 @@ mod item;
 use item::{Item, State};
 
 mod manager;
-use manager::{Error, InternalId, ItemManager, RefId, ProgramResult};
+use manager::{Error, InternalId, ItemManager, ProgramResult, RefId};
 use manager::{Interactable, Searchable};
 
 mod report;
@@ -156,7 +156,7 @@ fn subcmd_next(
         .collect();
 
     report_manager.display_report("Next", &items, ReportStyle::Brief, |i| {
-        i.state == State::Todo
+        i.state != State::Done
     });
 
     Ok(ProgramResult {
@@ -195,14 +195,81 @@ fn subcmd_selection(
     };
 
     match args.action.unwrap_or(SelAct::ListBrief) {
-        SelAct::Modify(_sargs) => {
-            todo!("under mainentance");
-            // manager.mass_modify(&r, m);
+        SelAct::Modify(sargs) => {
+            let proceed = |manager: &mut ItemManager| {
+                for &id in &range {
+                    manager.interact_mut(RefId(id), |item| {
+                        if let Some(name) = &sargs.name {
+                            item.name = name.clone();
+                        }
 
-            Ok(ProgramResult {
-                should_save: false,
-                exit_status: 32,
-            })
+                        if let Some(context) = &sargs.context {
+                            if context.is_empty() {
+                                item.context = None;
+                            } else {
+                                item.context = Some(context.clone());
+                                // TODO: validate context (as Item.validated()) or something
+                            }
+                        }
+
+                        if let Some(note) = sargs.note {
+                            if note {
+                                item.state = State::Note;
+                            } else {
+                                // only change to active/pending if item is actually a note
+                                if let State::Note = item.state {
+                                    item.state = State::Todo;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                Ok(ProgramResult {
+                    should_save: true,
+                    exit_status: 0,
+                })
+            };
+
+            let selected: Vec<&Item> = range
+                .iter()
+                .map(|&id| manager.find(RefId(id)).unwrap())
+                .collect();
+
+            report_manager.display_report(
+                "Items to be modified",
+                &selected,
+                ReportStyle::Shallow,
+                |_| true,
+            );
+
+            eprintln!();
+
+            let modifications = sargs.modifications_description();
+
+            if modifications.is_empty() {
+                eprintln!("No changes were specified");
+
+                // exit sucessfully though, I don't think this is necessarily a problem.
+                Ok(ProgramResult {
+                    should_save: false,
+                    exit_status: 0,
+                })
+            } else {
+                eprintln!("Changes to be made:");
+                for modification in sargs.modifications_description() {
+                    eprintln!(" * {}", modification);
+                }
+
+                if confirm_with_default(true) {
+                    proceed(manager)
+                } else {
+                    Ok(ProgramResult {
+                        should_save: false,
+                        exit_status: 1,
+                    })
+                }
+            }
         }
         SelAct::Add(sargs) => {
             let mut proceed = || {
@@ -303,10 +370,14 @@ fn subcmd_selection(
             })
         }
         SelAct::Delete(sargs) => {
-            fn thing(data: &mut Vec<Item>, ids: &HashSet<RefId>) {
+            /// Iterates recursively of a vector of items and their children, removing any items that are on the
+            /// selection. IDs on the selection that aren't found will be ignored. This is probably not a problem
+            /// because we already made sure the selection passed here has only valid IDs, so any missing IDs are from
+            /// children of items that were already deleted on this run.
+            fn thing(data: &mut Vec<Item>, selection: &HashSet<RefId>) {
                 data.retain(|item| {
                     if let Some(id) = item.ref_id {
-                        if ids.contains(&RefId(id)) {
+                        if selection.contains(&RefId(id)) {
                             return false;
                         }
                     }
@@ -315,32 +386,8 @@ fn subcmd_selection(
                 });
 
                 for item in data.iter_mut() {
-                    thing(&mut item.children, ids);
+                    thing(&mut item.children, selection);
                 }
-
-
-                // let mut i = 0;
-
-                // while i < data.len() {
-                //     if let Some(id) = data[i].ref_id {
-                //         if ids.contains(&RefId(id)) {
-                //             // this will move the item at the end of the vector to the current position, which I don't
-                //             // think is a problem, since we're not gonna increase i if the deletion happens
-                //             // TODO: but I need to take a deeper look at this since it might mess up the order
-                //             data.swap_remove(i);
-                //         } else {
-                //             // do the same operation to the children, if there's any
-                //             let children = &mut data[i].children;
-
-                //             if children.len() > 0 {
-                //                 thing(children, ids);
-                //             }
-
-                //             // only increment here because, if the item is removed, everything is gonna be moved back
-                //             i += 1;
-                //         }
-                //     }
-                // }
             }
 
             let proceed = |manager: &mut ItemManager| {
@@ -349,9 +396,8 @@ fn subcmd_selection(
                     &range.iter().map(|&id| RefId(id)).collect(),
                 );
 
-                // WARNING: I don't think IDs need to be freed since
-                // the application will close soon, but that might be
-                // a thing to worry on the future.
+                // I don't think IDs need to be freed since the application closes soon after this, but that might be a
+                // thing to worry on the future.
 
                 Ok(ProgramResult {
                     should_save: true,
@@ -372,7 +418,6 @@ fn subcmd_selection(
                     |_| true,
                 );
 
-                eprintln!("Do you wish to delete these items?");
                 if confirm_with_default(true) {
                     proceed(manager)
                 } else {
@@ -393,15 +438,14 @@ fn subcmd_selection(
                 ));
             }
 
-            let proceed = |manager: &mut ItemManager| {
-                match manager.swap(RefId(range[0]), RefId(range[1])) {
+            let proceed =
+                |manager: &mut ItemManager| match manager.swap(RefId(range[0]), RefId(range[1])) {
                     Ok(()) => Ok(ProgramResult {
                         should_save: true,
                         exit_status: 0,
                     }),
                     Err(e) => Err(format!("item swap failed: {}", e)),
-                }
-            };
+                };
 
             if !sargs.force.unwrap_or(false) {
                 let selection: Vec<&Item> = range
@@ -416,7 +460,6 @@ fn subcmd_selection(
                     |_| true,
                 );
 
-                eprintln!("Do you wish to swap these items?");
                 eprintln!("Each item will keep their children.");
                 if confirm_with_default(true) {
                     proceed(manager)
@@ -495,7 +538,6 @@ fn subcmd_selection(
                 }
             }
 
-            eprintln!("Do you wish to change the ownership of these items?");
             eprintln!("Each item will keep its children.");
 
             if confirm_with_default(true) {

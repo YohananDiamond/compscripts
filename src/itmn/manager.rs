@@ -249,8 +249,6 @@ impl ItemManager {
             }
             .normalize(),
         );
-
-        // TODO: self.modified = true;
     }
 
     pub fn add_child<T>(
