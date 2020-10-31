@@ -14,7 +14,7 @@ pub struct ReportManager {
 impl ReportManager {
     pub fn print_single_item(&self, item: &Item, indent: usize) {
         eprintln!(
-            "{}{} [{:>02}]{} {}",
+            "{}{} [{:>02}]{}{} {}",
             std::iter::repeat(' ')
                 .take(self.spaces_per_indent * indent)
                 .collect::<String>(),
@@ -24,6 +24,11 @@ impl ReportManager {
                 State::Note => '-',
             },
             item.ref_id.unwrap_or(item.internal_id),
+            if item.description.is_empty() {
+                ""
+            } else {
+                " (D)"
+            },
             match item.context() {
                 Some(c) => format!(" @{}", c),
                 None => String::new(),

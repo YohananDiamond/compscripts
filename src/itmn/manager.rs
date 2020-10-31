@@ -233,6 +233,7 @@ impl ItemManager {
         name: &str,
         context: &str,
         state: State,
+        description: String,
         children: Vec<Item>,
     ) {
         // Might crash with an overflow but seriously, who is gonna have 4,294,967,296 items in a lifetime?
@@ -249,6 +250,7 @@ impl ItemManager {
                 name,
                 context,
                 state,
+                description,
                 children,
             ),
         );
@@ -260,6 +262,7 @@ impl ItemManager {
         name: &str,
         context: &str,
         state: State,
+        description: String,
         children: Vec<Item>,
     ) -> Result<(), ()>
     where
@@ -279,6 +282,7 @@ impl ItemManager {
                     name,
                     context,
                     state,
+                    description,
                     children,
                 ),
             );

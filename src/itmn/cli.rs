@@ -59,20 +59,24 @@ pub enum SelectionAction {
     Modify(ItemBatchMod),
     #[clap(aliases = &["ac"], about = "Add a child to each one of the matches")]
     Add(ItemAddDetails), // TODO: require confirmation if the amount of items selected is more than one.
-    #[clap(about = "Mark the matches as DONE, if their states are TODO")]
+    #[clap(about = "Mark the items on the selection as DONE, if their states are TODO")]
     Done,
-    #[clap(alias = "tree", about = "List matches in a tree")]
+    #[clap(alias = "tree", about = "List selection in a tree")]
     ListTree,
-    #[clap(aliases = &["l", "ls", "list"], about = "List matches, showing only the first child of each, if any")]
+    #[clap(aliases = &["l", "ls", "list"], about = "List selection, showing only the first child of each, if any")]
     ListBrief,
-    #[clap(about = "List matches without showing any children")]
+    #[clap(about = "List selection without showing any children")]
     ListShallow,
-    #[clap(aliases = &["del", "rm", "remove"], about = "Delete matches")]
+    #[clap(aliases = &["del", "rm", "remove"], about = "Delete selected items")]
     Delete(ForceArgs),
     #[clap(about = "Swap two items")]
     Swap(ForceArgs),
-    #[clap(alias = "chown", about = "Change ownership of a task")]
+    #[clap(alias = "chown", about = "Change ownership of the selected item(s)")]
     ChangeOwnership(ChownArgs),
+    #[clap(aliases = &["edesc"], about = "Edit the description of an item")]
+    EditDescription,
+    #[clap(aliases = &["desc", "desc"], about = "Print the description of an item")]
+    PrintDescription,
 }
 
 #[derive(Debug, Clap, Clone)]

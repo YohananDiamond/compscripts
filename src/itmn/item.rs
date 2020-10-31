@@ -16,14 +16,17 @@ pub struct Item {
     pub ref_id: Option<u32>,
     /// The ID for internal representation, and also for managing hidden tasks (such as the "hidden" ones).
     pub internal_id: u32,
-    /// The name of the Item.
+    /// The name of the item.
     pub name: String,
     /// The context of the item, GTD-style.
     context: Option<String>,
     /// The state of the item (note, todo, done etc.)
     pub state: State,
-    /// The children of this item.
-    /// TODO: optimize this with Option<Vec> for less unecessary allocations
+    /// The description of the item.
+    /// Defaults to an empty description if not present already.
+    #[serde(default)]
+    pub description: String,
+    /// The children of this item, if any.
     pub children: Vec<Item>,
     // TODO: creation_date: /* idk */,
     // TODO: defer_date: Option</* idk */>,
@@ -54,6 +57,7 @@ impl Item {
         name: &str,
         context: &str, // we're gonna have to copy anyways... :v
         state: State,
+        description: String,
         children: Vec<Item>,
     ) -> Self {
         Self {
@@ -62,6 +66,7 @@ impl Item {
             name: Self::validate_name(name),
             context: Self::validate_context(context),
             state,
+            description,
             children,
         }
     }

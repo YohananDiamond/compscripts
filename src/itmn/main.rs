@@ -7,6 +7,8 @@ use clap::Clap;
 use std::collections::HashSet;
 use std::path::Path;
 
+mod tmp;
+
 mod cli;
 use cli::*;
 
@@ -116,7 +118,8 @@ fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<Program
             Some(false) | None => State::Todo,
             Some(true) => State::Note,
         },
-        Vec::new(),
+        String::new(), // description
+        Vec::new(), // children
     );
 
     Ok(ProgramResult {
@@ -249,6 +252,7 @@ fn subcmd_selection(
             }
         }
         SelAct::Add(sargs) => {
+            // TODO: add a description argument
             let mut proceed = || {
                 for id in &range {
                     manager
@@ -263,7 +267,8 @@ fn subcmd_selection(
                                 Some(false) | None => State::Todo,
                                 Some(true) => State::Note,
                             },
-                            Vec::new(),
+                            String::new(), // description
+                            Vec::new(), // children
                         )
                         .unwrap();
                 }
@@ -275,7 +280,7 @@ fn subcmd_selection(
             };
 
             if range.len() > 1 {
-                eprintln!("More than one item was selected. All of them will receive new identical children.");
+                eprintln!("More than one item was selected. All of them will receive new identical children copies.");
 
                 if !confirm_with_default(false) {
                     proceed()
@@ -289,10 +294,48 @@ fn subcmd_selection(
                 proceed()
             }
         }
+        SelAct::PrintDescription => {
+            if range.len() != 1 {
+                return Err("The selection should have exactly one item.".into());
+            }
+
+            manager.interact(RefId(range[0]), |i| {
+                let last_char = i.description.chars().rev().nth(0).unwrap();
+                match last_char {
+                    '\n' => eprint!("{}", i.description),
+                    _ => eprintln!("{}", i.description),
+                }
+
+                Ok(ProgramResult {
+                    should_save: false,
+                    exit_status: 0,
+                })
+            }).unwrap()
+        },
+        SelAct::EditDescription => {
+            if range.len() != 1 {
+                return Err("The selection should have exactly one item.".into());
+            }
+
+            manager.interact_mut(RefId(range[0]), |i| {
+                match tmp::edit_text(&i.description) {
+                    Ok((new_description, 0)) => {
+                        i.description = new_description;
+
+                        Ok(ProgramResult {
+                            should_save: true,
+                            exit_status: 0,
+                        })
+                    },
+                    Ok((_, code)) => Err(format!("non-zero exit code: {}", code)),
+                    Err(e) => Err(format!("failed to edit text: {}", e)),
+                }
+            }).unwrap()
+        }
         SelAct::Done => {
-            for id in &range {
+            for &id in &range {
                 manager
-                    .interact_mut(RefId(*id), |i| {
+                    .interact_mut(RefId(id), |i| {
                         if let State::Todo = i.state {
                             i.state = State::Done;
                         }

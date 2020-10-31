@@ -475,6 +475,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "curl",
+ "rand",
  "regex",
  "select",
  "serde",
