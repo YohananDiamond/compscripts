@@ -73,9 +73,9 @@ pub enum SelectionAction {
     Swap(ForceArgs),
     #[clap(alias = "chown", about = "Change ownership of the selected item(s)")]
     ChangeOwnership(ChownArgs),
-    #[clap(aliases = &["edesc"], about = "Edit the description of an item")]
+    #[clap(aliases = &["ed", "edesc"], about = "Edit the description of an item")]
     EditDescription,
-    #[clap(aliases = &["desc", "desc"], about = "Print the description of an item")]
+    #[clap(aliases = &["desc"], about = "Print the description of an item")]
     PrintDescription,
 }
 
