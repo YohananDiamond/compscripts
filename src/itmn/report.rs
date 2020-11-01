@@ -106,7 +106,7 @@ impl ReportManager {
         eprintln!("{} | {} selected items", name, report_list.len());
 
         for item in report_list {
-            self.print_item_styled(item, style, 0, f);
+            self.print_item_styled(item, style, 0, filter);
         }
     }
 }

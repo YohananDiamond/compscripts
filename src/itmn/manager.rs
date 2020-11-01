@@ -32,7 +32,7 @@ impl From<u32> for InternalId {
 /// The core structure of the database.
 pub struct ItemManager {
     /// The "root" of the data managed by this database. All items are contained here.
-    data: Vec<Item>,
+    pub data: Vec<Item>,
     /// A set that stores all the used internal IDs.
     /// TODO: consider removing this one. Simply having the greatest internal ID stored seems enough.
     internal_ids: HashSet<u32>,
@@ -193,7 +193,7 @@ impl ItemManager {
                 // add RefID
                 if let Some(id) = item.ref_id {
                     if ref_set.contains(&id) {
-                        return Err(Error::RepeatedRefID(RefId(id)));
+                        return Err(ManagerError::RepeatedRefID(RefId(id)));
                     } else {
                         ref_set.insert(id);
                     }
@@ -201,7 +201,7 @@ impl ItemManager {
 
                 // add InternalID
                 if in_set.contains(&item.internal_id) {
-                    return Err(Error::RepeatedInternalID(InternalId(item.internal_id)));
+                    return Err(ManagerError::RepeatedInternalID(InternalId(item.internal_id)));
                 } else {
                     in_set.insert(item.internal_id);
                 }
@@ -220,7 +220,7 @@ impl ItemManager {
         for item in data.iter_mut() {
             match item.state {
                 ItemState::Done => (),
-                ItemState::Todo | State::Note => {
+                ItemState::Todo | ItemState::Note => {
                     if item.ref_id.is_none() {
                         item.ref_id = Some(core::misc::find_lowest_free_value(&ref_set));
                     }
