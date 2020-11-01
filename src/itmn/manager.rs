@@ -1,14 +1,20 @@
+//! Stores data structures related to managing the database.
+
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::item::{Item, State};
+use crate::item::{Item, ItemState};
 
 use core::data::data_serialize;
 
 // TODO: move this to mod item
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
+/// Used for reference ID search operations
 pub struct RefId(pub u32);
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
+/// Used for internal ID search operations
 pub struct InternalId(pub u32);
 
 impl From<u32> for RefId {
@@ -23,9 +29,10 @@ impl From<u32> for InternalId {
     }
 }
 
+/// The core structure of the database.
 pub struct ItemManager {
-    /// The data managed by this struct.
-    pub data: Vec<Item>,
+    /// The "root" of the data managed by this database. All items are contained here.
+    data: Vec<Item>,
     /// A set that stores all the used internal IDs.
     /// TODO: consider removing this one. Simply having the greatest internal ID stored seems enough.
     internal_ids: HashSet<u32>,
@@ -33,20 +40,33 @@ pub struct ItemManager {
     ref_ids: HashSet<u32>,
 }
 
-pub enum Error {
+/// A collection of errors that can happen during the ItemManager creation.
+pub enum ManagerError {
+    /// At least two of the items have a repeated reference ID.
     RepeatedRefID(RefId),
+    /// At least two of the items have a repeated internal ID.
     RepeatedInternalID(InternalId),
 }
 
+/// A trait to help on searching through a database with different types of queries.
 pub trait Searchable<T> {
+    /// The data possibly returned, in reference, by the search.
     type Data;
 
+    /// Attempts to find `query`, returning an immutable reference to it if found.
     fn find(&self, query: T) -> Option<&Self::Data>;
+
+    /// Attempts to find `query`, returning a mutable reference to it if found.
     fn find_mut(&mut self, query: T) -> Option<&mut Self::Data>;
 }
 
+/// An extension trait to [`Searchable<T>`], which allows the caller to find and interact with a single piece of data at
+/// once, safely.
+///
+/// [`Searchable<T>`]: Searchable
 pub trait Interactable<T>: Searchable<T> {
-    /// TODO: @doc
+    /// Finds a piece of data by immutable reference with `query`, and runs `interaction` on it, returning the output
+    /// `O` of the function.
     fn interact<O, F>(&self, query: T, interaction: F) -> Option<O>
     where
         F: Fn(&<Self as Searchable<T>>::Data) -> O,
@@ -54,7 +74,8 @@ pub trait Interactable<T>: Searchable<T> {
         Some(interaction(self.find(query)?))
     }
 
-    /// TODO: @doc
+    /// Finds a piece of data by mutable reference with `query`, and runs `interaction` on it, returning the output `O`
+    /// of the function.
     fn interact_mut<O, F>(&mut self, query: T, interaction: F) -> Option<O>
     where
         F: Fn(&mut <Self as Searchable<T>>::Data) -> O,
@@ -149,13 +170,17 @@ impl Searchable<InternalId> for ItemManager {
     }
 }
 
+/// The result returned by a program.
 pub struct ProgramResult {
     pub should_save: bool,
     pub exit_status: i32,
 }
 
 impl ItemManager {
-    pub fn new(mut data: Vec<Item>) -> Result<Self, Error> {
+    /// Attempts to create an ItemManager instance, returning a [`ManagerError`] if the operation failed.
+    ///
+    /// [`ManagerError`]: ManagerError
+    pub fn new(mut data: Vec<Item>) -> Result<Self, ManagerError> {
         let mut ref_set: HashSet<u32> = HashSet::new();
         let mut in_set: HashSet<u32> = HashSet::new();
 
@@ -163,7 +188,7 @@ impl ItemManager {
             data: &Vec<Item>,
             ref_set: &mut HashSet<u32>,
             in_set: &mut HashSet<u32>,
-        ) -> Result<(), Error> {
+        ) -> Result<(), ManagerError> {
             for item in data {
                 // add RefID
                 if let Some(id) = item.ref_id {
@@ -194,8 +219,8 @@ impl ItemManager {
         // With the now filled IDs set, find free reference IDs for pending/note items that don't have IDs.
         for item in data.iter_mut() {
             match item.state {
-                State::Done => (),
-                State::Todo | State::Note => {
+                ItemState::Done => (),
+                ItemState::Todo | State::Note => {
                     if item.ref_id.is_none() {
                         item.ref_id = Some(core::misc::find_lowest_free_value(&ref_set));
                     }
@@ -210,8 +235,8 @@ impl ItemManager {
         })
     }
 
-    /// Starts a program of function signature F.
-    /// F should take the manager as an argument and return a ProgramResult struct.
+    /// Starts a program of function signature F, which takes a mutable reference of the manager as an argument and
+    /// returns a ProgramResult struct.
     pub fn start_program_with_file<F>(&mut self, file: &Path, program: F) -> i32
     where
         F: FnOnce(&mut ItemManager) -> ProgramResult,
@@ -228,11 +253,12 @@ impl ItemManager {
         result.exit_status
     }
 
+    /// Constructs and adds an item to the root of the database.
     pub fn add_item_on_root(
         &mut self,
         name: &str,
         context: &str,
-        state: State,
+        state: ItemState,
         description: String,
         children: Vec<Item>,
     ) {
@@ -261,7 +287,7 @@ impl ItemManager {
         query: T,
         name: &str,
         context: &str,
-        state: State,
+        state: ItemState,
         description: String,
         children: Vec<Item>,
     ) -> Result<(), ()>
@@ -405,12 +431,12 @@ impl ItemManager {
     //                     }
     //                     if let Some(note) = m.note {
     //                         if note {
-    //                             i.state = State::Note;
+    //                             i.state = ItemState::Note;
     //                         } else {
     //                             match i.state {
-    //                                 State::Todo | State::Done => (),
-    //                                 State::Note => {
-    //                                     i.state = State::Todo;
+    //                                 ItemState::Todo | State::Done => (),
+    //                                 ItemState::Note => {
+    //                                     i.state = ItemState::Todo;
     //                                 }
     //                             }
     //                         }

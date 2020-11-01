@@ -1,8 +1,15 @@
+//! A module containing the command-line arguments, parsed by [`clap`].
+//!
+//! Most of this is left undocumented in the normal sense, since most options already have an `about` field.
+//!
+//! [`clap`]: clap
+
 use clap::Clap;
 
-use crate::item::{Item, State};
+use crate::item::{Item, ItemState};
 
 #[derive(Debug, Clap)]
+/// The entry point for the 
 pub struct Options {
     #[clap(
         short,
@@ -24,7 +31,8 @@ pub enum SubCmd {
     Next,
     #[clap(about = "Add an item")]
     Add(ItemAddDetails),
-    #[clap(aliases = &["s", "sel", "sri"], about = "Select items by refrence ID and do something with them")]
+    #[clap(aliases = &["s", "sel", "sri"], about = "Select items by reference ID and do something with them")]
+    // TODO: 
     SelRefID(SelectionDetails),
     // #[clap(aliases = &["sel-internal", "sii"], about = "Select items by internal ID and do something with them")]
     // TODO: SelInternalID(SelectionDetails),
@@ -94,6 +102,7 @@ pub struct ItemBatchMod {
 }
 
 impl ItemBatchMod {
+    /// Describes what changes will be done to the item.
     pub fn modifications_description(&self) -> Vec<String> {
         let mut vec = Vec::new();
 
@@ -120,6 +129,7 @@ impl ItemBatchMod {
         vec
     }
 
+    /// Apply modifications to an item.
     pub fn mod_item(self, item: &mut Item) {
         if let Some(name) = self.name {
             item.name = name;
@@ -131,11 +141,11 @@ impl ItemBatchMod {
 
         if let Some(note) = self.note {
             if note {
-                item.state = State::Note;
+                item.state = ItemState::Note;
             } else {
                 // only change to active/pending if item is actually a note
-                if let State::Note = item.state {
-                    item.state = State::Todo;
+                if let ItemState::Note = item.state {
+                    item.state = ItemState::Todo;
                 }
             }
         }
@@ -143,9 +153,16 @@ impl ItemBatchMod {
 }
 
 #[derive(Debug, Clap)]
+/// A simple argument to help with common --force commands.
 pub struct ForceArgs {
     #[clap(short, long, about = "Skip warning messages (unsafe)")]
     pub force: Option<bool>,
+}
+
+impl Into<bool> for ForceArgs {
+    fn into(self) -> bool {
+        self.force.unwrap_or(false)
+    }
 }
 
 #[derive(Debug, Clap)]

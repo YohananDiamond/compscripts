@@ -7,26 +7,25 @@ use clap::Clap;
 use std::collections::HashSet;
 use std::path::Path;
 
-mod tmp;
-
 mod cli;
 use cli::*;
 
 mod item;
-use item::{Item, State};
+use item::{Item, ItemState};
 
 mod manager;
-use manager::{Error, InternalId, ItemManager, ProgramResult, RefId};
+use manager::{ManagerError, InternalId, ItemManager, ProgramResult, RefId};
 use manager::{Interactable, Searchable};
 
 mod report;
 use report::{ReportManager, ReportStyle};
 
+use core::tmp;
 use core::data::data_serialize;
 use core::error::ExitCode;
 use core::misc::confirm_with_default;
 
-fn fallback_string_if_needed<'a>(string: &'a str) -> &'a str {
+fn validate_parsed_string<'a>(string: &'a str) -> &'a str {
     for ch in string.chars() {
         if !matches!(ch, '\n' | ' ' | '\t' | '\r') {
             return string;
@@ -54,7 +53,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let data: Vec<Item> = match data_serialize::import(fallback_string_if_needed(&contents)) {
+    let data: Vec<Item> = match data_serialize::import(validate_parsed_string(&contents)) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to parse file: {}", e);
@@ -64,14 +63,14 @@ fn main() -> ExitCode {
 
     let mut manager = match ItemManager::new(data) {
         Ok(manager) => manager,
-        Err(Error::RepeatedRefID(id)) => {
+        Err(ManagerError::RepeatedRefID(id)) => {
             eprintln!(
                 "Repeated reference ID in file: {}; it'll have to be removed manually.",
                 id.0
             );
             return ExitCode(1);
         }
-        Err(Error::RepeatedInternalID(id)) => {
+        Err(ManagerError::RepeatedInternalID(id)) => {
             eprintln!(
                 "Repeated internal ID in file: {}; it'll have to be removed manually.",
                 id.0
@@ -115,8 +114,8 @@ fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<Program
         &args.name,
         &args.context.unwrap_or(String::new()),
         match args.note {
-            Some(false) | None => State::Todo,
-            Some(true) => State::Note,
+            Some(false) | None => ItemState::Todo,
+            Some(true) => ItemState::Note,
         },
         String::new(), // description
         Vec::new(), // children
@@ -128,6 +127,7 @@ fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<Program
     })
 }
 
+/// A function for the `list` subcommand
 fn subcmd_list(
     manager: &ItemManager,
     report_manager: &ReportManager,
@@ -139,7 +139,7 @@ fn subcmd_list(
         .collect();
 
     report_manager.display_report("All items (surface)", &items, ReportStyle::Tree, |i| {
-        i.state != State::Done
+        i.state != ItemState::Done
     });
 
     Ok(ProgramResult {
@@ -148,6 +148,7 @@ fn subcmd_list(
     })
 }
 
+/// A function for the `next` subcommand
 fn subcmd_next(
     manager: &ItemManager,
     report_manager: &ReportManager,
@@ -159,7 +160,7 @@ fn subcmd_next(
         .collect();
 
     report_manager.display_report("Next", &items, ReportStyle::Brief, |i| {
-        i.state != State::Done
+        i.state != ItemState::Done
     });
 
     Ok(ProgramResult {
@@ -168,6 +169,7 @@ fn subcmd_next(
     })
 }
 
+/// A function for the `sel-ref-id` subcommand
 fn subcmd_selection(
     manager: &mut ItemManager,
     report_manager: &ReportManager,
@@ -264,8 +266,8 @@ fn subcmd_selection(
                                 None => "",
                             },
                             match sargs.note {
-                                Some(false) | None => State::Todo,
-                                Some(true) => State::Note,
+                                Some(false) | None => ItemState::Todo,
+                                Some(true) => ItemState::Note,
                             },
                             String::new(), // description
                             Vec::new(), // children
@@ -336,8 +338,8 @@ fn subcmd_selection(
             for &id in &range {
                 manager
                     .interact_mut(RefId(id), |i| {
-                        if let State::Todo = i.state {
-                            i.state = State::Done;
+                        if let ItemState::Todo = i.state {
+                            i.state = ItemState::Done;
                         }
                     })
                     .unwrap(); // safe because we already made sure all IDs in the range exist.
