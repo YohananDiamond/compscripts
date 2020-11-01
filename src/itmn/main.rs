@@ -320,7 +320,7 @@ fn subcmd_selection(
             }
 
             manager.interact_mut(RefId(range[0]), |i| {
-                match tmp::edit_text(&i.description) {
+                match tmp::edit_text(&i.description, Some("md")) {
                     Ok((new_description, 0)) => {
                         i.description = new_description;
 

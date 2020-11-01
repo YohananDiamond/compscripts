@@ -6,7 +6,7 @@ use std::process::Command;
 
 use std::path::PathBuf;
 
-pub fn make_tmp() -> PathBuf {
+pub fn make_tmp(extension: Option<&str>) -> PathBuf {
     loop {
         let path_str = rand::thread_rng()
             .sample_iter(&Alphanumeric)
@@ -14,7 +14,10 @@ pub fn make_tmp() -> PathBuf {
             .collect::<String>();
 
         let mut pathbuf = std::env::temp_dir();
-        pathbuf.push(format!("tmp.{}", path_str));
+        pathbuf.push(format!("tmp.{}{}", path_str, match extension {
+            Some(ext) => format!(".{}", ext),
+            None => String::new(),
+        }));
 
         if !pathbuf.as_path().exists() {
             break pathbuf;
@@ -22,8 +25,8 @@ pub fn make_tmp() -> PathBuf {
     }
 }
 
-pub fn edit_text(text: &str) -> Result<(String, i32), String> {
-    let tmpbuf = make_tmp();
+pub fn edit_text(text: &str, extension: Option<&str>) -> Result<(String, i32), String> {
+    let tmpbuf = make_tmp(extension);
 
     {
         // create, open and write to file
