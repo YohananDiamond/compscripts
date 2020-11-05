@@ -64,7 +64,7 @@ impl PartialOrd for Item {
 }
 
 impl Item {
-    /// Creates a new item.
+    /// Creates a new item with the specified information.
     pub fn new(
         ref_id: Option<u32>,
         internal_id: u32,

@@ -3,10 +3,12 @@
 // TODO: add a way to recursively sort items, like what was done with filters.
 
 use crate::item::{Item, ItemState};
+use std::io;
+use std::io::Write;
 
 #[derive(Clone, Copy)]
 /// Specifies the way the items should be shown on the screen.
-pub enum ReportStyle {
+pub enum ReportDepth {
     /// Only show the item itself.
     Shallow,
     /// Show the item, the first child (if any) and a message saying how many more children are there (if any).
@@ -15,98 +17,132 @@ pub enum ReportStyle {
     Tree,
 }
 
-/// Stores settings for the displaying and manages the displaying itself.
-pub struct ReportManager {
+// #[derive(Clone, Copy)]
+// pub enum SortOption {
+//     Default,
+//     Alphabetical,
+// }
+
+// impl Default for SortOption {
+//     fn default() -> Self {
+//         Self::Default
+//     }
+// }
+
+/// Stores settings for the report displaying.
+#[derive(Clone)]
+pub struct ReportConfig {
+    /// The amount of spaces used per indent.
     pub spaces_per_indent: usize,
 }
 
-impl ReportManager {
-    /// Print a single item, with a specific indent level.
-    pub fn print_single_item(&self, item: &Item, indent: usize) {
-        // TODO: add named arguments
-        eprintln!(
-            "{}{} [{:>02}]{}{} {}",
-            std::iter::repeat(' ')
-                .take(self.spaces_per_indent * indent)
-                .collect::<String>(),
-            match item.state {
-                ItemState::Todo => 'o',
-                ItemState::Done => 'x',
-                ItemState::Note => '-',
-            },
-            item.ref_id.unwrap_or(item.internal_id),
-            if item.description.is_empty() {
-                ""
-            } else {
-                " (D)"
-            },
-            match item.context() {
-                Some(c) => format!(" @{}", c),
-                None => String::new(),
-            },
-            item.name,
-        );
+impl ReportConfig {
+    pub fn get_indent_spaces(&self, indent: usize) -> String {
+        std::iter::repeat(' ')
+            .take(self.spaces_per_indent * indent)
+            .collect()
     }
+}
 
-    /// Checks if a filter passes through an item and prints the item with a style and a specific indent level if it
-    /// passed.
-    pub fn print_item_styled<F>(&self, item: &Item, style: ReportStyle, indent: usize, filter: F)
-    where
-        F: Fn(&Item) -> bool + Copy,
-    {
-        let filter_result = filter(item);
+#[derive(Clone)]
+// FIXME: is this too heavy to pass through?
+pub struct ReportInfo<'a> {
+    /// An immutable reference to the report config.
+    pub config: &'a ReportConfig,
+    /// The indent level. Not the same as the final indent, or the amount of spaces per indent.
+    pub indent: usize,
+    /// The filter that the items must go through to be printed, if any.
+    pub filter: Option<&'a dyn Fn(&Item) -> bool>,
+    /// The depth that the item displaying must go through.
+    pub depth: ReportDepth,
+    // pub sort: SortOption,
+}
 
-        match style {
-            ReportStyle::Shallow => {
-                if filter_result {
-                    self.print_single_item(item, indent);
-                }
-            }
-            ReportStyle::Brief => {
-                if filter_result {
-                    self.print_single_item(item, indent);
+pub trait Report {
+    fn display(item: &Item, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()>;
+    fn display_all(items: &mut dyn Iterator<Item = &Item>, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()>;
+    fn report(label: &str, items: &mut dyn Iterator<Item = &Item>, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()> {
+        writeln!(out, "{} | {} selected items", label, items.size_hint().0)?;
+
+        Self::display_all(items, info, out)
+    }
+}
+
+pub struct BasicReport;
+impl Report for BasicReport {
+    fn display(item: &Item, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()> {
+        let proceed = |out: &mut dyn Write| -> io::Result<()> {
+            writeln!(
+                out,
+                "{indent}{state} {id_repr}{description}{context} ~ {text}",
+                id_repr = match item.ref_id {
+                    Some(id) => format!("#{:>02}", id),
+                    None => format!("i{:>02}", item.internal_id),
+                },
+                indent = info.config.get_indent_spaces(info.indent),
+                state = match item.state {
+                    ItemState::Todo => "o",
+                    ItemState::Done => "x",
+                    ItemState::Note => "-",
+                },
+                description = match item.description.is_empty() {
+                    true => "",
+                    false => " (D)",
+                },
+                context = match item.context() {
+                    Some(ctx) => format!(" @{}", ctx),
+                    None => format!(""),
+                },
+                text = item.name,
+            )?;
+
+            match info.depth {
+                ReportDepth::Shallow => (),
+                ReportDepth::Brief => {
+                    let mut info = info.clone();
+                    info.indent += 1;
+                    info.depth = ReportDepth::Shallow;
 
                     if item.children.len() > 0 {
-                        self.print_item_styled(
-                            &item.children[0],
-                            ReportStyle::Shallow,
-                            indent + 1,
-                            filter,
-                        );
-                    }
+                        Self::display(&item.children[0], &info, out)?;
 
-                    if item.children.len() > 1 {
-                        eprintln!(
-                            "{}  {} more...",
-                            std::iter::repeat(' ')
-                                .take(self.spaces_per_indent * indent)
-                                .collect::<String>(),
-                            item.children.len() - 1
-                        );
+                        if item.children.len() > 1 {
+                            writeln!(
+                                out,
+                                "{}  {} more...",
+                                info.config.get_indent_spaces(info.indent),
+                                item.children.len() - 1
+                            )?;
+                        }
                     }
                 }
-            }
-            ReportStyle::Tree => {
-                if filter_result {
-                    self.print_single_item(item, indent);
+                ReportDepth::Tree => {
+                    let mut info = info.clone();
+                    info.indent += 1;
 
-                    for child in &item.children {
-                        self.print_item_styled(&child, ReportStyle::Tree, indent + 1, filter);
-                    }
+                    Self::display_all(&mut item.children.iter(), &info, out)?;
                 }
             }
+
+            Ok(())
+        };
+
+        if let Some(filter) = info.filter {
+            if filter(item) {
+                proceed(out)?;
+            }
+        } else {
+            proceed(out)?;
         }
+
+        Ok(())
     }
 
-    /// Displays a collection of items with a specific report style and a filter.
-    pub fn display_report<F>(&self, name: &str, report_list: &[&Item], style: ReportStyle, filter: F)
-    where
-        F: Fn(&Item) -> bool + Copy,
-    {
-        eprintln!("{} | {} selected items", name, report_list.len());
-
-        for item in report_list {
-            self.print_item_styled(item, style, 0, filter);
+    fn display_all(items: &mut dyn Iterator<Item = &Item>, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()> {
+        for item in items {
+            Self::display(item, info, out)?;
         }
+
+        Ok(())
     }
 }

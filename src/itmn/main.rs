@@ -5,6 +5,7 @@
 use clap::Clap;
 
 use std::collections::HashSet;
+use std::io;
 use std::path::Path;
 
 mod cli;
@@ -14,16 +15,16 @@ mod item;
 use item::{Item, ItemState};
 
 mod manager;
-use manager::{ManagerError, InternalId, ItemManager, ProgramResult, RefId};
 use manager::{Interactable, Searchable};
+use manager::{InternalId, ItemManager, ManagerError, ProgramResult, RefId};
 
 mod report;
-use report::{ReportManager, ReportStyle};
+use report::{BasicReport, Report, ReportConfig, ReportDepth, ReportInfo};
 
-use core::tmp;
 use core::data::data_serialize;
 use core::error::ExitCode;
 use core::misc::confirm_with_default;
+use core::tmp;
 
 fn validate_parsed_string<'a>(string: &'a str) -> &'a str {
     for ch in string.chars() {
@@ -80,18 +81,19 @@ fn main() -> ExitCode {
     };
 
     let code = manager.start_program_with_file(&path, |manager| {
+        type UsedReport = BasicReport;
         const DEFAULT_SUBCOMMAND: SubCmd = SubCmd::Next;
         const SPACES_PER_INDENT: usize = 2;
 
-        let report_manager = ReportManager {
+        let report_cfg = ReportConfig {
             spaces_per_indent: SPACES_PER_INDENT,
         };
 
         let result = match subcmd.unwrap_or(DEFAULT_SUBCOMMAND) {
-            SubCmd::SelRefID(args) => subcmd_selection(manager, &report_manager, args),
+            SubCmd::SelRefID(args) => subcmd_selection::<UsedReport>(manager, args, &report_cfg),
             SubCmd::Add(args) => subcmd_add(manager, args),
-            SubCmd::List => subcmd_list(manager, &report_manager),
-            SubCmd::Next => subcmd_next(manager, &report_manager),
+            SubCmd::List => subcmd_list::<UsedReport>(manager, &report_cfg),
+            SubCmd::Next => subcmd_next::<UsedReport>(manager, &report_cfg),
         };
 
         match result {
@@ -118,7 +120,7 @@ fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<Program
             Some(true) => ItemState::Note,
         },
         String::new(), // description
-        Vec::new(), // children
+        Vec::new(),    // children
     );
 
     Ok(ProgramResult {
@@ -128,9 +130,9 @@ fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<Program
 }
 
 /// A function for the `list` subcommand
-fn subcmd_list(
+fn subcmd_list<R: Report>(
     manager: &ItemManager,
-    report_manager: &ReportManager,
+    report_cfg: &ReportConfig,
 ) -> Result<ProgramResult, String> {
     let items: Vec<&Item> = manager
         .surface_ref_ids()
@@ -138,9 +140,18 @@ fn subcmd_list(
         .map(|&i| manager.find(i).unwrap())
         .collect();
 
-    report_manager.display_report("All items (surface)", &items, ReportStyle::Tree, |i| {
-        i.state != ItemState::Done
-    });
+    R::report(
+        "All items (surface)",
+        &mut items.into_iter(),
+        &ReportInfo {
+            config: report_cfg,
+            indent: 0,
+            filter: Some(&|i: &Item| i.state != ItemState::Done),
+            depth: ReportDepth::Tree,
+        },
+        &mut io::stderr(),
+    )
+    .unwrap();
 
     Ok(ProgramResult {
         should_save: false,
@@ -149,9 +160,9 @@ fn subcmd_list(
 }
 
 /// A function for the `next` subcommand
-fn subcmd_next(
+fn subcmd_next<R: Report>(
     manager: &ItemManager,
-    report_manager: &ReportManager,
+    report_cfg: &ReportConfig,
 ) -> Result<ProgramResult, String> {
     let items: Vec<&Item> = manager
         .surface_ref_ids()
@@ -159,9 +170,18 @@ fn subcmd_next(
         .map(|&i| manager.find(i).unwrap())
         .collect();
 
-    report_manager.display_report("Next", &items, ReportStyle::Brief, |i| {
-        i.state != ItemState::Done
-    });
+    R::report(
+        "Next",
+        &mut items.into_iter(),
+        &ReportInfo {
+            config: report_cfg,
+            indent: 0,
+            filter: Some(&|i: &Item| i.state != ItemState::Done),
+            depth: ReportDepth::Brief,
+        },
+        &mut io::stderr(),
+    )
+    .unwrap();
 
     Ok(ProgramResult {
         should_save: false,
@@ -170,10 +190,10 @@ fn subcmd_next(
 }
 
 /// A function for the `sel-ref-id` subcommand
-fn subcmd_selection(
+fn subcmd_selection<R: Report>(
     manager: &mut ItemManager,
-    report_manager: &ReportManager,
     args: SelectionDetails,
+    report_cfg: &ReportConfig,
 ) -> Result<ProgramResult, String> {
     type SelAct = SelectionAction;
 
@@ -218,12 +238,18 @@ fn subcmd_selection(
                 .map(|&id| manager.find(RefId(id)).unwrap())
                 .collect();
 
-            report_manager.display_report(
+            R::report(
                 "Items to be modified",
-                &selected,
-                ReportStyle::Shallow,
-                |_| true,
-            );
+                &mut selected.into_iter(),
+                &ReportInfo {
+                    config: report_cfg,
+                    indent: 0,
+                    filter: None,
+                    depth: ReportDepth::Shallow,
+                },
+                &mut io::stderr(),
+            )
+            .unwrap();
 
             eprintln!();
 
@@ -270,7 +296,7 @@ fn subcmd_selection(
                                 Some(true) => ItemState::Note,
                             },
                             String::new(), // description
-                            Vec::new(), // children
+                            Vec::new(),    // children
                         )
                         .unwrap();
                 }
@@ -301,38 +327,42 @@ fn subcmd_selection(
                 return Err("The selection should have exactly one item.".into());
             }
 
-            manager.interact(RefId(range[0]), |i| {
-                let last_char = i.description.chars().rev().nth(0).unwrap();
-                match last_char {
-                    '\n' => eprint!("{}", i.description),
-                    _ => eprintln!("{}", i.description),
-                }
+            manager
+                .interact(RefId(range[0]), |i| {
+                    let last_char = i.description.chars().rev().nth(0).unwrap();
+                    match last_char {
+                        '\n' => eprint!("{}", i.description),
+                        _ => eprintln!("{}", i.description),
+                    }
 
-                Ok(ProgramResult {
-                    should_save: false,
-                    exit_status: 0,
+                    Ok(ProgramResult {
+                        should_save: false,
+                        exit_status: 0,
+                    })
                 })
-            }).unwrap()
-        },
+                .unwrap()
+        }
         SelAct::EditDescription => {
             if range.len() != 1 {
                 return Err("The selection should have exactly one item.".into());
             }
 
-            manager.interact_mut(RefId(range[0]), |i| {
-                match tmp::edit_text(&i.description, Some("md")) {
-                    Ok((new_description, 0)) => {
-                        i.description = new_description;
+            manager
+                .interact_mut(RefId(range[0]), |i| {
+                    match tmp::edit_text(&i.description, Some("md")) {
+                        Ok((new_description, 0)) => {
+                            i.description = new_description;
 
-                        Ok(ProgramResult {
-                            should_save: true,
-                            exit_status: 0,
-                        })
-                    },
-                    Ok((_, code)) => Err(format!("non-zero exit code: {}", code)),
-                    Err(e) => Err(format!("failed to edit text: {}", e)),
-                }
-            }).unwrap()
+                            Ok(ProgramResult {
+                                should_save: true,
+                                exit_status: 0,
+                            })
+                        }
+                        Ok((_, code)) => Err(format!("non-zero exit code: {}", code)),
+                        Err(e) => Err(format!("failed to edit text: {}", e)),
+                    }
+                })
+                .unwrap()
         }
         SelAct::Done => {
             for &id in &range {
@@ -356,7 +386,18 @@ fn subcmd_selection(
                 .map(|&id| manager.find(RefId(id)).unwrap())
                 .collect();
 
-            report_manager.display_report("Tree listing", &selected, ReportStyle::Tree, |_| true);
+            R::report(
+                "Tree listing",
+                &mut selected.into_iter(),
+                &ReportInfo {
+                    config: report_cfg,
+                    indent: 0,
+                    filter: None,
+                    depth: ReportDepth::Tree,
+                },
+                &mut io::stderr(),
+            )
+            .unwrap();
 
             Ok(ProgramResult {
                 should_save: false,
@@ -369,7 +410,18 @@ fn subcmd_selection(
                 .map(|&id| manager.find(RefId(id)).unwrap())
                 .collect();
 
-            report_manager.display_report("Brief listing", &selected, ReportStyle::Brief, |_| true);
+            R::report(
+                "Brief listing",
+                &mut selected.into_iter(),
+                &ReportInfo {
+                    config: report_cfg,
+                    indent: 0,
+                    filter: None,
+                    depth: ReportDepth::Brief,
+                },
+                &mut io::stderr(),
+            )
+            .unwrap();
 
             Ok(ProgramResult {
                 should_save: false,
@@ -382,12 +434,18 @@ fn subcmd_selection(
                 .map(|&id| manager.find(RefId(id)).unwrap())
                 .collect();
 
-            report_manager.display_report(
+            R::report(
                 "Shallow listing",
-                &selected,
-                ReportStyle::Shallow,
-                |_| true,
-            );
+                &mut selected.into_iter(),
+                &ReportInfo {
+                    config: report_cfg,
+                    indent: 0,
+                    filter: None,
+                    depth: ReportDepth::Shallow,
+                },
+                &mut io::stderr(),
+            )
+            .unwrap();
 
             Ok(ProgramResult {
                 should_save: false,
@@ -436,12 +494,18 @@ fn subcmd_selection(
                     .map(|&id| manager.find(RefId(id)).unwrap())
                     .collect();
 
-                report_manager.display_report(
+                R::report(
                     "Items to be deleted",
-                    &selection,
-                    ReportStyle::Tree,
-                    |_| true,
-                );
+                    &mut selection.into_iter(),
+                    &ReportInfo {
+                        config: report_cfg,
+                        indent: 0,
+                        filter: None,
+                        depth: ReportDepth::Tree,
+                    },
+                    &mut io::stderr(),
+                )
+                .unwrap();
 
                 if confirm_with_default(true) {
                     proceed(manager)
@@ -478,12 +542,18 @@ fn subcmd_selection(
                     .map(|&id| manager.find(RefId(id)).unwrap())
                     .collect();
 
-                report_manager.display_report(
+                R::report(
                     "Items to be swapped",
-                    &selection,
-                    ReportStyle::Brief,
-                    |_| true,
-                );
+                    &mut selection.into_iter(),
+                    &ReportInfo {
+                        config: report_cfg,
+                        indent: 0,
+                        filter: None,
+                        depth: ReportDepth::Brief,
+                    },
+                    &mut io::stderr(),
+                )
+                .unwrap();
 
                 eprintln!("Each item will keep their children.");
                 if confirm_with_default(true) {
@@ -533,12 +603,18 @@ fn subcmd_selection(
                 .map(|&id| manager.find(RefId(id)).unwrap())
                 .collect();
 
-            report_manager.display_report(
+            R::report(
                 "Items to be moved",
-                &items,
-                ReportStyle::Shallow,
-                |_| true,
-            );
+                &mut items.into_iter(),
+                &ReportInfo {
+                    config: report_cfg,
+                    indent: 0,
+                    filter: None,
+                    depth: ReportDepth::Shallow,
+                },
+                &mut io::stderr(),
+            )
+            .unwrap();
 
             let new_owner = match NewOwner::parse(&sargs.new_owner) {
                 Ok(new) => new,
