@@ -101,7 +101,7 @@ impl Item {
         ref_id: Option<u32>,
         internal_id: u32,
         name: &str,
-        context: &str, // we're gonna have to copy anyways... :v
+        context: &str, // we're gonna have to copy it anyways..
         state: ItemState,
         description: String,
         children: Vec<Item>,
@@ -160,6 +160,16 @@ impl Item {
     /// Validates and sets the context of the item.
     pub fn set_context(&mut self, new_context: &str) {
         self.context = Self::validate_context(new_context);
+    }
+
+    pub fn has_child(&self, child: &Item) -> bool {
+        for item in &self.children {
+            if item.internal_id == child.internal_id || item.has_child(child) {
+                return true;
+            }
+        }
+
+        false
     }
 }
 

@@ -47,7 +47,6 @@ impl ReportConfig {
 }
 
 #[derive(Clone)]
-// FIXME: is this too heavy to pass through?
 pub struct ReportInfo<'a> {
     /// An immutable reference to the report config.
     pub config: &'a ReportConfig,

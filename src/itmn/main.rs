@@ -619,14 +619,16 @@ fn subcmd_selection<R: Report>(
                 Err(e) => return Err(format!("failed to parse new-owner argument: {}", e)),
             };
 
+            eprintln!();
+
             let new_owner_internal_id = match new_owner {
                 NewOwner::Root => {
-                    eprintln!("New ownership: ROOT");
+                    eprintln!("New owner: ROOT");
                     None
                 }
                 NewOwner::ByInternal(InternalId(id)) => {
                     if let Some(item) = manager.find(InternalId(id)) {
-                        eprintln!("New owner: [I#{}] {}", id, item.name);
+                        eprintln!("New owner: {:?} (I#{})", item.name, id);
                         Some(id)
                     } else {
                         return Err(format!("could not find item with InternalId = {}", id));
@@ -634,7 +636,7 @@ fn subcmd_selection<R: Report>(
                 }
                 NewOwner::ByRef(RefId(id)) => {
                     if let Some(item) = manager.find(RefId(id)) {
-                        eprintln!("New owner: [R#{}] {}", id, item.name);
+                        eprintln!("New owner: {:?} (R#{})", item.name, id);
                         Some(item.internal_id)
                     } else {
                         return Err(format!("could not find item with RefId = {}", id));
@@ -642,19 +644,53 @@ fn subcmd_selection<R: Report>(
                 }
             };
 
-            // Prevent the new owner from being in the selection
-            for &id in &range {
-                let item = manager.find(RefId(id)).unwrap();
-                if Some(item.internal_id) == new_owner_internal_id {
-                    return Err(format!(
-                        r#"item "{name}" ({ref}I#{internal}) is on selection and is the new owner"#,
-                        name = item.name,
-                        r#ref = match item.ref_id {
-                            Some(id) => format!("R#{}, ", id),
-                            None => String::new(),
-                        },
-                        internal = format!("{}", item.internal_id)
-                    ));
+            {
+                let items: Vec<_> = range
+                    .iter()
+                    .map(|&id| manager.find(RefId(id)).unwrap())
+                    .collect();
+
+                // Prevent the new owner from being in the selection
+                for item in &items {
+                    if Some(item.internal_id) == new_owner_internal_id {
+                        return Err(format!(
+                            r#"item "{name}" ({ref}I#{internal}) is on selection and is the new owner"#,
+                            name = item.name,
+                            r#ref = match item.ref_id {
+                                Some(id) => format!("R#{}, ", id),
+                                None => String::new(),
+                            },
+                            internal = format!("{}", item.internal_id)
+                        ));
+                    }
+                }
+
+                // Prevent a selected item from being a child of another selected item (for now)
+                for (i, item) in items.iter().enumerate() {
+                    for (i2, item2) in items.iter().enumerate() {
+                        if i != i2 && item.has_child(item2) {
+                            return Err(format!(
+                                r#"parent-child conflict:
+let item A = {c_name:?} ({c_ref}I#{c_internal}), and
+    item B = {p_name:?} ({p_ref}I#{p_internal}).
+A is a child of B, but both A and B are on the selection."#,
+                                // Child
+                                c_name = item2.name,
+                                c_ref = match item2.ref_id {
+                                    Some(id) => format!("R#{}, ", id),
+                                    None => String::new(),
+                                },
+                                c_internal = format!("{}", item2.internal_id),
+                                // Parent
+                                p_name = item.name,
+                                p_ref = match item.ref_id {
+                                    Some(id) => format!("R#{}, ", id),
+                                    None => String::new(),
+                                },
+                                p_internal = format!("{}", item.internal_id),
+                            ));
+                        }
+                    }
                 }
             }
 
@@ -663,10 +699,8 @@ fn subcmd_selection<R: Report>(
             if confirm_with_default(true) {
                 let items: Vec<Item> = range
                     .iter()
-                    .map(|&id| manager.try_remove(RefId(id)).unwrap()) // almost-safe (see TODOs below) unwrap due to range check
+                    .map(|&id| manager.try_remove(RefId(id)).unwrap()) // safe unwrap due to range check
                     .collect();
-
-                // TODO: prevent a selected item from being a child of another selected item (for now)
 
                 match new_owner {
                     NewOwner::Root => manager.data.extend(items),

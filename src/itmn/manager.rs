@@ -167,6 +167,10 @@ impl ItemManager {
             ref_set: &mut HashSet<u32>,
             in_set: &mut HashSet<u32>,
         ) -> Result<(), ManagerError> {
+            // TODO: store the amount of items to reserve on a file instead of doing this
+            ref_set.reserve(data.len() / 4); // reserve a fraction of the amount of items, since many of them might not have ref IDs.
+            in_set.reserve(data.len());
+
             for item in data {
                 // add RefID
                 if let Some(id) = item.ref_id {
@@ -202,7 +206,9 @@ impl ItemManager {
                 ItemState::Done => (),
                 ItemState::Todo | ItemState::Note => {
                     if item.ref_id.is_none() {
-                        item.ref_id = Some(core::misc::find_lowest_free_value(&ref_set));
+                        let id = core::misc::find_lowest_free_value(&ref_set);
+                        item.ref_id = Some(id);
+                        ref_set.insert(id);
                     }
                 }
             }
