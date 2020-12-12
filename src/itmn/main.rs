@@ -620,11 +620,14 @@ fn subcmd_selection<R: Report>(
             };
 
             let new_owner_internal_id = match new_owner {
-                NewOwner::Root => eprintln!("New ownership: ROOT"),
+                NewOwner::Root => {
+                    eprintln!("New ownership: ROOT");
+                    None
+                }
                 NewOwner::ByInternal(InternalId(id)) => {
                     if let Some(item) = manager.find(InternalId(id)) {
                         eprintln!("New owner: [I#{}] {}", id, item.name);
-                        id
+                        Some(id)
                     } else {
                         return Err(format!("could not find item with InternalId = {}", id));
                     }
@@ -632,7 +635,7 @@ fn subcmd_selection<R: Report>(
                 NewOwner::ByRef(RefId(id)) => {
                     if let Some(item) = manager.find(RefId(id)) {
                         eprintln!("New owner: [R#{}] {}", id, item.name);
-                        item.internal_id
+                        Some(item.internal_id)
                     } else {
                         return Err(format!("could not find item with RefId = {}", id));
                     }
@@ -642,13 +645,13 @@ fn subcmd_selection<R: Report>(
             // Prevent the new owner from being in the selection
             for &id in &range {
                 let item = manager.find(RefId(id)).unwrap();
-                if item.internal_id == new_owner_internal_id {
+                if Some(item.internal_id) == new_owner_internal_id {
                     return Err(format!(
                         r#"item "{name}" ({ref}I#{internal}) is on selection and is the new owner"#,
                         name = item.name,
                         r#ref = match item.ref_id {
-                            Some(id) => &format!("R#{}, ", id),
-                            None => "",
+                            Some(id) => format!("R#{}, ", id),
+                            None => String::new(),
                         },
                         internal = format!("{}", item.internal_id)
                     ));
