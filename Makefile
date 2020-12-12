@@ -13,4 +13,8 @@ check:
 	cargo check --bin bkmk
 	cargo check --bin itmn
 
+test:
+	cargo test --bin bkmk
+	cargo test --bin itmn
+
 .PHONY: output install check

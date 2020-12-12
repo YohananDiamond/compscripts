@@ -3,31 +3,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::item::{Item, ItemState};
+use crate::item::{Item, ItemState, RefId, InternalId};
 
 use core::data::data_serialize;
-
-// TODO: move this to mod item
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-/// Used for reference ID search operations
-pub struct RefId(pub u32);
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-/// Used for internal ID search operations
-pub struct InternalId(pub u32);
-
-impl From<u32> for RefId {
-    fn from(id: u32) -> Self {
-        Self(id)
-    }
-}
-
-impl From<u32> for InternalId {
-    fn from(id: u32) -> Self {
-        Self(id)
-    }
-}
 
 /// The core structure of the database.
 pub struct ItemManager {
@@ -201,7 +179,9 @@ impl ItemManager {
 
                 // add InternalID
                 if in_set.contains(&item.internal_id) {
-                    return Err(ManagerError::RepeatedInternalID(InternalId(item.internal_id)));
+                    return Err(ManagerError::RepeatedInternalID(InternalId(
+                        item.internal_id,
+                    )));
                 } else {
                     in_set.insert(item.internal_id);
                 }
@@ -269,17 +249,15 @@ impl ItemManager {
         let free_internal_id = core::misc::find_highest_free_value(&self.internal_ids);
         self.internal_ids.insert(free_internal_id);
 
-        self.data.push(
-            Item::new(
-                Some(free_ref_id),
-                free_internal_id,
-                name,
-                context,
-                state,
-                description,
-                children,
-            ),
-        );
+        self.data.push(Item::new(
+            Some(free_ref_id),
+            free_internal_id,
+            name,
+            context,
+            state,
+            description,
+            children,
+        ));
     }
 
     pub fn add_child<T>(
@@ -301,17 +279,15 @@ impl ItemManager {
         self.internal_ids.insert(free_internal_id.into());
 
         if let Some(i) = self.find_mut(query) {
-            i.children.push(
-                Item::new(
-                    Some(free_ref_id),
-                    free_internal_id,
-                    name,
-                    context,
-                    state,
-                    description,
-                    children,
-                ),
-            );
+            i.children.push(Item::new(
+                Some(free_ref_id),
+                free_internal_id,
+                name,
+                context,
+                state,
+                description,
+                children,
+            ));
             Ok(())
         } else {
             Err(())

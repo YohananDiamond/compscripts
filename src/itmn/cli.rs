@@ -7,9 +7,10 @@
 use clap::Clap;
 
 use crate::item::{Item, ItemState};
+use core::cowstr::CowStr;
 
 #[derive(Debug, Clap)]
-/// The entry point for the 
+/// The entry point for the
 pub struct Options {
     #[clap(
         short,
@@ -32,7 +33,7 @@ pub enum SubCmd {
     #[clap(about = "Add an item")]
     Add(ItemAddDetails),
     #[clap(aliases = &["s", "sel", "sri"], about = "Select items by reference ID and do something with them")]
-    // TODO: 
+    // TODO:
     SelRefID(SelectionDetails),
     // #[clap(aliases = &["sel-internal", "sii"], about = "Select items by internal ID and do something with them")]
     // TODO: SelInternalID(SelectionDetails),
@@ -48,6 +49,8 @@ pub struct ItemAddDetails {
     pub context: Option<String>,
     #[clap(short, long, about = "If the item is a note")]
     pub note: Option<bool>,
+    #[clap(short, long, about = "The description of the item")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clap)]
@@ -66,7 +69,7 @@ pub enum SelectionAction {
     #[clap(alias = "mod", about = "Modify the matches")]
     Modify(ItemBatchMod),
     #[clap(aliases = &["ac"], about = "Add a child to each one of the matches")]
-    Add(ItemAddDetails), // TODO: require confirmation if the amount of items selected is more than one.
+    Add(ItemAddDetails),
     #[clap(about = "Mark the items on the selection as DONE, if their states are TODO")]
     Done,
     #[clap(alias = "tree", about = "List selection in a tree")]
@@ -103,18 +106,18 @@ pub struct ItemBatchMod {
 
 impl ItemBatchMod {
     /// Describes what changes will be done to the item.
-    pub fn modifications_description(&self) -> Vec<String> {
+    pub fn modifications_description(&self) -> Vec<CowStr> {
         let mut vec = Vec::new();
 
         if let Some(name) = &self.name {
-            vec.push(format!("Change name to {:?}", name));
+            vec.push(format!("Change name to {:?}", name).into());
         }
 
         if let Some(ctx) = &self.context {
             vec.push(if Item::context_translates_to_null(ctx) {
                 "Remove context".into()
             } else {
-                format!("Change context to {:?}", ctx)
+                format!("Change context to {:?}", ctx).into()
             });
         }
 
@@ -155,7 +158,7 @@ impl ItemBatchMod {
 #[derive(Debug, Clap)]
 /// A simple argument to help with common --force commands.
 pub struct ForceArgs {
-    #[clap(short, long, about = "Skip warning messages (unsafe)")]
+    #[clap(short, long, about = "Skip warning/confirmation messages (unsafe)")]
     pub force: Option<bool>,
 }
 
@@ -167,6 +170,8 @@ impl Into<bool> for ForceArgs {
 
 #[derive(Debug, Clap)]
 pub struct ChownArgs {
-    #[clap(about = "the new owner of the task. Should be .ROOT, a reference ID, or an internal ID - prefixed by i")]
+    #[clap(
+        about = "the new owner of the task. Should be .ROOT, a reference ID, or an internal ID - prefixed by i"
+    )]
     pub new_owner: String,
 }

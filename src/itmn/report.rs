@@ -3,6 +3,8 @@
 // TODO: add a way to recursively sort items, like what was done with filters.
 
 use crate::item::{Item, ItemState};
+use core::cowstr::CowStr;
+
 use std::io;
 use std::io::Write;
 
@@ -60,9 +62,24 @@ pub struct ReportInfo<'a> {
 
 pub trait Report {
     fn display(item: &Item, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()>;
-    fn display_all(items: &mut dyn Iterator<Item = &Item>, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()>;
-    fn report(label: &str, items: &mut dyn Iterator<Item = &Item>, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()> {
-        writeln!(out, "{} | {} selected items", label, items.size_hint().0)?;
+    fn display_all(
+        items: &mut dyn Iterator<Item = &Item>,
+        info: &ReportInfo,
+        out: &mut dyn Write,
+    ) -> io::Result<()>;
+    fn report(
+        label: &str,
+        items: &mut dyn Iterator<Item = &Item>,
+        info: &ReportInfo,
+        out: &mut dyn Write,
+    ) -> io::Result<()> {
+        let length_message: CowStr = match items.size_hint().0 {
+            0 | 1 => "No items to be displayed".into(),
+            2 => "1 item to be displayed".into(),
+            i => format!("{} items to be displayed", i - 1).into(),
+        };
+
+        writeln!(out, "{} | {}", label, length_message)?;
 
         Self::display_all(items, info, out)
     }
@@ -138,7 +155,11 @@ impl Report for BasicReport {
         Ok(())
     }
 
-    fn display_all(items: &mut dyn Iterator<Item = &Item>, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()> {
+    fn display_all(
+        items: &mut dyn Iterator<Item = &Item>,
+        info: &ReportInfo,
+        out: &mut dyn Write,
+    ) -> io::Result<()> {
         for item in items {
             Self::display(item, info, out)?;
         }

@@ -6,3 +6,4 @@ pub mod error;
 pub mod io;
 pub mod misc;
 pub mod tmp;
+pub mod cowstr;

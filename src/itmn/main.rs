@@ -12,11 +12,11 @@ mod cli;
 use cli::*;
 
 mod item;
-use item::{Item, ItemState};
+use item::{InternalId, Item, ItemState, RefId};
 
 mod manager;
 use manager::{Interactable, Searchable};
-use manager::{InternalId, ItemManager, ManagerError, ProgramResult, RefId};
+use manager::{ItemManager, ManagerError, ProgramResult};
 
 mod report;
 use report::{BasicReport, Report, ReportConfig, ReportDepth, ReportInfo};
@@ -64,17 +64,17 @@ fn main() -> ExitCode {
 
     let mut manager = match ItemManager::new(data) {
         Ok(manager) => manager,
-        Err(ManagerError::RepeatedRefID(id)) => {
+        Err(ManagerError::RepeatedRefID(RefId(id))) => {
             eprintln!(
                 "Repeated reference ID in file: {}; it'll have to be removed manually.",
-                id.0
+                id
             );
             return ExitCode(1);
         }
-        Err(ManagerError::RepeatedInternalID(id)) => {
+        Err(ManagerError::RepeatedInternalID(InternalId(id))) => {
             eprintln!(
                 "Repeated internal ID in file: {}; it'll have to be removed manually.",
-                id.0
+                id
             );
             return ExitCode(1);
         }
@@ -205,10 +205,10 @@ fn subcmd_selection<R: Report>(
             }
 
             // abort if there's an invalid ID
-            if let Some(missing) = manager.first_invalid_ref_id(vec.iter()) {
+            if let Some(RefId(missing)) = manager.first_invalid_ref_id(vec.iter()) {
                 return Err(format!(
                     "there's at least one invalid ID (#{}) on the selection",
-                    missing.0,
+                    missing,
                 ));
             }
 
@@ -280,23 +280,19 @@ fn subcmd_selection<R: Report>(
             }
         }
         SelAct::Add(sargs) => {
-            // TODO: add a description argument
             let mut proceed = || {
-                for id in &range {
+                for &id in &range {
                     manager
                         .add_child(
-                            RefId(*id),
+                            RefId(id),
                             &sargs.name,
-                            match sargs.context.as_ref() {
-                                Some(sref) => sref,
-                                None => "",
-                            },
+                            sargs.context.as_ref().unwrap_or(&String::new()),
                             match sargs.note {
                                 Some(false) | None => ItemState::Todo,
                                 Some(true) => ItemState::Note,
                             },
-                            String::new(), // description
-                            Vec::new(),    // children
+                            sargs.description.clone().unwrap_or(String::new()),
+                            Vec::new(), // children
                         )
                         .unwrap();
                 }
@@ -329,8 +325,8 @@ fn subcmd_selection<R: Report>(
 
             manager
                 .interact(RefId(range[0]), |i| {
-                    let last_char = i.description.chars().rev().nth(0).unwrap();
-                    match last_char {
+                    // check which char is the last one
+                    match i.description.chars().rev().nth(0).unwrap_or('\n') {
                         '\n' => eprint!("{}", i.description),
                         _ => eprintln!("{}", i.description),
                     }
@@ -623,18 +619,18 @@ fn subcmd_selection<R: Report>(
 
             match new_owner {
                 NewOwner::Root => eprintln!("New ownership: ROOT"),
-                NewOwner::ByInternal(id) => {
-                    if let Some(item) = manager.find(id) {
-                        eprintln!("New ownership: [I#{}] {}", id.0, item.name);
+                NewOwner::ByInternal(InternalId(id)) => {
+                    if let Some(item) = manager.find(InternalId(id)) {
+                        eprintln!("New ownership: [I#{}] {}", id, item.name);
                     } else {
-                        return Err(format!("could not find item with InternalId = {}", id.0));
+                        return Err(format!("could not find item with InternalId = {}", id));
                     }
                 }
-                NewOwner::ByRef(id) => {
-                    if let Some(item) = manager.find(id) {
-                        eprintln!("New ownership: [R#{}] {}", id.0, item.name);
+                NewOwner::ByRef(RefId(id)) => {
+                    if let Some(item) = manager.find(RefId(id)) {
+                        eprintln!("New ownership: [R#{}] {}", id, item.name);
                     } else {
-                        return Err(format!("could not find item with RefId = {}", id.0));
+                        return Err(format!("could not find item with RefId = {}", id));
                     }
                 }
             }

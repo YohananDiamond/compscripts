@@ -14,6 +14,38 @@ pub enum ItemState {
     Note,
 }
 
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+/// Used for reference ID search operations
+pub struct RefId(pub u32);
+
+impl From<u32> for RefId {
+    fn from(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl Into<u32> for RefId {
+    fn into(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+/// Used for internal ID search operations
+pub struct InternalId(pub u32);
+
+impl Into<u32> for InternalId {
+    fn into(self) -> u32 {
+        self.0
+    }
+}
+
+impl From<u32> for InternalId {
+    fn from(id: u32) -> Self {
+        Self(id)
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 /// The main data unit used to store information on this program's database.
 pub struct Item {
@@ -28,8 +60,8 @@ pub struct Item {
     /// An ID for internal representation of items. Each of these IDs are unique, even if the task is already marked as
     /// done. This is useful to help on referencing tasks which were already marked as done.
     pub internal_id: u32,
-    #[serde(default)]
     /// Extra information for an item, with filetype = markdown by default.
+    #[serde(default)]
     pub description: String,
     /// The children of this item, if any.
     ///
@@ -45,7 +77,7 @@ pub struct Item {
     /// [`Vec::with_capacity(0)`]: std::vec::Vec::with_capacity
     /// [`shrink_to_fit`]: Vec::shrink_to_fit
     pub children: Vec<Item>,
-    // TODO: creation_date: /* idk */,
+    // pub creation_date: Option<String>,
     // TODO: defer_date: Option</* idk */>,
     // TODO: deprecate context (possibly)
     context: Option<String>,
@@ -104,12 +136,14 @@ impl Item {
         name.chars().filter(|&c| validate_char(c)).collect()
     }
 
+    #[allow(dead_code)]
     #[inline]
     /// Returns an immutable reference to the item name.
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
 
+    #[allow(dead_code)]
     #[inline]
     /// Validates and sets the name of the item.
     pub fn set_name(&mut self, new_name: &str) {
