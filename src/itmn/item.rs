@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Copy, Clone)]
 /// An item state describes whether said item is actionable (to do / done) or a note. More possible states might be
 /// added on the future.
 pub enum ItemState {

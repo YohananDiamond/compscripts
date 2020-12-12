@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::item::{Item, ItemState, RefId, InternalId};
+use crate::item::{InternalId, Item, ItemState, RefId};
 
 use core::data::data_serialize;
 
@@ -47,7 +47,7 @@ pub trait Interactable<T>: Searchable<T> {
     /// `O` of the function.
     fn interact<O, F>(&self, query: T, interaction: F) -> Option<O>
     where
-        F: Fn(&<Self as Searchable<T>>::Data) -> O,
+        F: FnOnce(&<Self as Searchable<T>>::Data) -> O,
     {
         Some(interaction(self.find(query)?))
     }
@@ -56,13 +56,13 @@ pub trait Interactable<T>: Searchable<T> {
     /// of the function.
     fn interact_mut<O, F>(&mut self, query: T, interaction: F) -> Option<O>
     where
-        F: Fn(&mut <Self as Searchable<T>>::Data) -> O,
+        F: FnOnce(&mut <Self as Searchable<T>>::Data) -> O,
     {
         Some(interaction(self.find_mut(query)?))
     }
 }
 
-impl<T, M: Searchable<T>> Interactable<T> for M {}
+impl<T, M> Interactable<T> for M where M: Searchable<T> {}
 
 impl Searchable<RefId> for ItemManager {
     type Data = Item;
@@ -369,67 +369,23 @@ impl ItemManager {
             }
         }
     }
+    
+    pub fn change_item_state<Q, F>(&mut self, id: Q, mapper: F) -> Result<(), ()>
+    where
+        Self: Searchable<Q, Data = Item>,
+        F: FnOnce(ItemState) -> ItemState,
+    {
+        let item = self.find_mut(id).ok_or(())?;
+        let new_state = mapper(item.state);
 
-    // FIXME: not working (why?)
-    // TODO: move this to main.rs, interactive functions shouldn't be here
-    // pub fn mass_modify(&mut self, range: &[Id], m: ItemBatchMod) {
-    //     // TODO: validate context (lowercase, replace spaces with dashes, etc.)
-    //     // This should probably be done in another function.
+        if new_state == ItemState::Done {
+            item.ref_id = None;
+        } 
 
-    //     if range.len() > 1 {
-    //         eprintln!("This will make the following modifications:");
-    //         if let Some(name) = &m.name {
-    //             eprintln!(" * Change name to {:?};", name);
-    //         }
-    //         if let Some(context) = &m.context {
-    //             eprintln!(" * Change context to {:?};", context);
-    //         }
-    //         if let Some(note) = &m.note {
-    //             if *note {
-    //                 eprintln!(" * Transform into a note (if not already);")
-    //             } else {
-    //                 eprintln!(" * Transform into a task (if not already);")
-    //             }
-    //         }
+        item.state = new_state;
 
-    //         if core::misc::confirm_with_default(false) {
-    //             for &id in range {
-    //                 self.interact_mut(id, |i| {
-    //                     if let Some(name) = &m.name {
-    //                         i.name = name.clone();
-    //                     }
-    //                     if let Some(context) = &m.context {
-    //                         if context.is_empty() {
-    //                             i.context = None;
-    //                         } else {
-    //                             i.context = Some(context.clone());
-    //                         }
-    //                     }
-    //                     if let Some(note) = m.note {
-    //                         if note {
-    //                             i.state = ItemState::Note;
-    //                         } else {
-    //                             match i.state {
-    //                                 ItemState::Todo | State::Done => (),
-    //                                 ItemState::Note => {
-    //                                     i.state = ItemState::Todo;
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 });
-
-    //                 eprintln!(
-    //                     "Modified {} task{}.",
-    //                     range.len(),
-    //                     if range.len() == 1 { "" } else { "s" }
-    //                 );
-
-    //                 self.after_interact_mut_hook();
-    //             }
-    //         }
-    //     }
-    // }
+        Ok(())
+    }
 }
 
 impl ItemManager {

@@ -1,7 +1,5 @@
 #![feature(termination_trait_lib)]
 
-// TODO: remove ref IDs from children when their parents are marked as done
-
 use clap::Clap;
 
 use std::collections::HashSet;
@@ -26,7 +24,7 @@ use core::error::ExitCode;
 use core::misc::confirm_with_default;
 use core::tmp;
 
-fn validate_parsed_string<'a>(string: &'a str) -> &'a str {
+fn validate_parsed_string(string: &str) -> &str {
     for ch in string.chars() {
         if !matches!(ch, '\n' | ' ' | '\t' | '\r') {
             return string;
@@ -37,9 +35,8 @@ fn validate_parsed_string<'a>(string: &'a str) -> &'a str {
 }
 
 fn main() -> ExitCode {
-    let home_path = std::env::var("HOME").unwrap();
-    let itmn_file =
-        std::env::var("ITMN_FILE").unwrap_or(format!("{}/.local/share/itmn", home_path));
+    let itmn_file = std::env::var("ITMN_FILE")
+        .unwrap_or_else(|_| format!("{}/.local/share/itmn", std::env::var("HOME").unwrap()));
 
     let options = cli::Options::parse();
     let subcmd = options.subcmd;
@@ -129,7 +126,9 @@ fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<Program
     })
 }
 
-/// A function for the `list` subcommand
+/// A function for the `list` subcommand.
+///
+/// Type argument `R` is the type of report that should be shown.
 fn subcmd_list<R: Report>(
     manager: &ItemManager,
     report_cfg: &ReportConfig,
@@ -159,7 +158,9 @@ fn subcmd_list<R: Report>(
     })
 }
 
-/// A function for the `next` subcommand
+/// A function for the `next` subcommand.
+///
+/// Type argument `R` is the type of report that should be shown.
 fn subcmd_next<R: Report>(
     manager: &ItemManager,
     report_cfg: &ReportConfig,
@@ -189,7 +190,9 @@ fn subcmd_next<R: Report>(
     })
 }
 
-/// A function for the `sel-ref-id` subcommand
+/// A function for the `sel-ref-id` subcommand.
+///
+/// Type argument `R` is the type of report that should be shown.
 fn subcmd_selection<R: Report>(
     manager: &mut ItemManager,
     args: SelectionDetails,
@@ -258,7 +261,7 @@ fn subcmd_selection<R: Report>(
             if modifications.is_empty() {
                 eprintln!("No changes were specified");
 
-                // exit sucessfully though, I don't think this is necessarily a problem.
+                // Exit sucessfully though, I don't think this is necessarily a problem.
                 Ok(ProgramResult {
                     should_save: false,
                     exit_status: 0,
@@ -325,7 +328,7 @@ fn subcmd_selection<R: Report>(
 
             manager
                 .interact(RefId(range[0]), |i| {
-                    // check which char is the last one
+                    // Check which char is the last one
                     match i.description.chars().rev().nth(0).unwrap_or('\n') {
                         '\n' => eprint!("{}", i.description),
                         _ => eprintln!("{}", i.description),
@@ -363,10 +366,9 @@ fn subcmd_selection<R: Report>(
         SelAct::Done => {
             for &id in &range {
                 manager
-                    .interact_mut(RefId(id), |i| {
-                        if let ItemState::Todo = i.state {
-                            i.state = ItemState::Done;
-                        }
+                    .change_item_state(RefId(id), |previous| match previous {
+                        ItemState::Todo => ItemState::Done,
+                        other => other,
                     })
                     .unwrap(); // safe because we already made sure all IDs in the range exist.
             }
@@ -393,7 +395,7 @@ fn subcmd_selection<R: Report>(
                 },
                 &mut io::stderr(),
             )
-            .unwrap();
+            .expect("Failed to show report");
 
             Ok(ProgramResult {
                 should_save: false,
@@ -417,7 +419,7 @@ fn subcmd_selection<R: Report>(
                 },
                 &mut io::stderr(),
             )
-            .unwrap();
+            .expect("Failed to show report");
 
             Ok(ProgramResult {
                 should_save: false,
@@ -441,7 +443,7 @@ fn subcmd_selection<R: Report>(
                 },
                 &mut io::stderr(),
             )
-            .unwrap();
+            .expect("Failed to show report");
 
             Ok(ProgramResult {
                 should_save: false,
