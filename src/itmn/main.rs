@@ -619,21 +619,39 @@ fn subcmd_selection<R: Report>(
                 Err(e) => return Err(format!("failed to parse new-owner argument: {}", e)),
             };
 
-            match new_owner {
+            let new_owner_internal_id = match new_owner {
                 NewOwner::Root => eprintln!("New ownership: ROOT"),
                 NewOwner::ByInternal(InternalId(id)) => {
                     if let Some(item) = manager.find(InternalId(id)) {
-                        eprintln!("New ownership: [I#{}] {}", id, item.name);
+                        eprintln!("New owner: [I#{}] {}", id, item.name);
+                        id
                     } else {
                         return Err(format!("could not find item with InternalId = {}", id));
                     }
                 }
                 NewOwner::ByRef(RefId(id)) => {
                     if let Some(item) = manager.find(RefId(id)) {
-                        eprintln!("New ownership: [R#{}] {}", id, item.name);
+                        eprintln!("New owner: [R#{}] {}", id, item.name);
+                        item.internal_id
                     } else {
                         return Err(format!("could not find item with RefId = {}", id));
                     }
+                }
+            };
+
+            // Prevent the new owner from being in the selection
+            for &id in &range {
+                let item = manager.find(RefId(id)).unwrap();
+                if item.internal_id == new_owner_internal_id {
+                    return Err(format!(
+                        r#"item "{name}" ({ref}I#{internal}) is on selection and is the new owner"#,
+                        name = item.name,
+                        r#ref = match item.ref_id {
+                            Some(id) => &format!("R#{}, ", id),
+                            None => "",
+                        },
+                        internal = format!("{}", item.internal_id)
+                    ));
                 }
             }
 
@@ -645,7 +663,6 @@ fn subcmd_selection<R: Report>(
                     .map(|&id| manager.try_remove(RefId(id)).unwrap()) // almost-safe (see TODOs below) unwrap due to range check
                     .collect();
 
-                // TODO: prevent the new owner from being in the selection
                 // TODO: prevent a selected item from being a child of another selected item (for now)
 
                 match new_owner {
