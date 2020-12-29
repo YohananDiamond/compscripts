@@ -158,7 +158,7 @@ fn subcmd_list<R: Report>(
             filter: Some(&|i: &Item| i.state != ItemState::Done),
             depth: ReportDepth::Tree,
         },
-        &mut io::stderr(),
+        &mut io::stdout(),
     )
     .unwrap();
 
@@ -190,7 +190,7 @@ fn subcmd_next<R: Report>(
             filter: Some(&|i: &Item| i.state != ItemState::Done),
             depth: ReportDepth::Brief,
         },
-        &mut io::stderr(),
+        &mut io::stdout(),
     )
     .unwrap();
 
@@ -260,7 +260,7 @@ fn subcmd_selection<R: Report>(
                     filter: None,
                     depth: ReportDepth::Shallow,
                 },
-                &mut io::stderr(),
+                &mut io::stdout(),
             )
             .unwrap();
 
@@ -403,7 +403,7 @@ fn subcmd_selection<R: Report>(
                     filter: None,
                     depth: ReportDepth::Tree,
                 },
-                &mut io::stderr(),
+                &mut io::stdout(),
             )
             .expect("Failed to show report");
 
@@ -427,7 +427,7 @@ fn subcmd_selection<R: Report>(
                     filter: None,
                     depth: ReportDepth::Brief,
                 },
-                &mut io::stderr(),
+                &mut io::stdout(),
             )
             .expect("Failed to show report");
 
@@ -451,7 +451,7 @@ fn subcmd_selection<R: Report>(
                     filter: None,
                     depth: ReportDepth::Shallow,
                 },
-                &mut io::stderr(),
+                &mut io::stdout(),
             )
             .expect("Failed to show report");
 
@@ -511,7 +511,7 @@ fn subcmd_selection<R: Report>(
                         filter: None,
                         depth: ReportDepth::Tree,
                     },
-                    &mut io::stderr(),
+                    &mut io::stdout(),
                 )
                 .unwrap();
 
@@ -559,7 +559,7 @@ fn subcmd_selection<R: Report>(
                         filter: None,
                         depth: ReportDepth::Brief,
                     },
-                    &mut io::stderr(),
+                    &mut io::stdout(),
                 )
                 .unwrap();
 
@@ -620,7 +620,7 @@ fn subcmd_selection<R: Report>(
                     filter: None,
                     depth: ReportDepth::Shallow,
                 },
-                &mut io::stderr(),
+                &mut io::stdout(),
             )
             .unwrap();
 
