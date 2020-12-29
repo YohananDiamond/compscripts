@@ -17,7 +17,7 @@ use manager::{Interactable, Searchable};
 use manager::{ItemManager, ManagerError, ProgramResult};
 
 mod report;
-use report::{BasicReport, Report, ReportConfig, ReportDepth, ReportInfo};
+use report::{Report, ReportConfig, ReportDepth, ReportInfo};
 
 use core::data::data_serialize;
 use core::error::ExitCode;
@@ -78,12 +78,12 @@ fn main() -> ExitCode {
     };
 
     let code = manager.start_program_with_file(&path, |manager| {
-        type UsedReport = BasicReport;
-        const DEFAULT_SUBCOMMAND: SubCmd = SubCmd::Next;
-        const SPACES_PER_INDENT: usize = 2;
+        type UsedReport = report::BasicReport;
+        const DEFAULT_SUBCOMMAND: SubCmd = SubCmd::List;
+        const DEFAULT_SPACES_PER_INDENT: usize = 2;
 
         let report_cfg = ReportConfig {
-            spaces_per_indent: SPACES_PER_INDENT,
+            spaces_per_indent: DEFAULT_SPACES_PER_INDENT,
         };
 
         let result = match subcmd.unwrap_or(DEFAULT_SUBCOMMAND) {
@@ -108,17 +108,27 @@ fn main() -> ExitCode {
     ExitCode(code)
 }
 
-fn subcmd_add(manager: &mut ItemManager, args: ItemAddDetails) -> Result<ProgramResult, String> {
-    manager.add_item_on_root(
-        &args.name,
-        &args.context.unwrap_or(String::new()),
-        match args.note {
+fn subcmd_add(
+    manager: &mut ItemManager,
+    ItemAddDetails {
+        name,
+        context,
+        note,
+        description,
+    }: ItemAddDetails,
+) -> Result<ProgramResult, String> {
+    let RefId(new_id) = manager.add_item_on_root(
+        &name,
+        &context.unwrap_or(String::new()),
+        match note {
             Some(false) | None => ItemState::Todo,
             Some(true) => ItemState::Note,
         },
-        String::new(), // description
-        Vec::new(),    // children
+        description.unwrap_or_else(String::new), // description
+        Vec::new(),                              // children
     );
+
+    eprintln!("OK! RefId = {}", new_id);
 
     Ok(ProgramResult {
         should_save: true,
@@ -348,7 +358,7 @@ fn subcmd_selection<R: Report>(
 
             manager
                 .interact_mut(RefId(range[0]), |i| {
-                    match tmp::edit_text(&i.description, Some("md")) {
+                    match tmp::edit_text(&i.description, Some("txt")) {
                         Ok((new_description, 0)) => {
                             i.description = new_description;
 

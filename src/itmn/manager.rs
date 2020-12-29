@@ -240,6 +240,8 @@ impl ItemManager {
     }
 
     /// Constructs and adds an item to the root of the database.
+    ///
+    /// Returns the item's RefId.
     pub fn add_item_on_root(
         &mut self,
         name: &str,
@@ -247,7 +249,7 @@ impl ItemManager {
         state: ItemState,
         description: String,
         children: Vec<Item>,
-    ) {
+    ) -> RefId {
         // Might crash with an overflow but seriously, who is gonna have 4,294,967,296 items in a lifetime?
         let free_ref_id = core::misc::find_lowest_free_value(&self.ref_ids);
         self.ref_ids.insert(free_ref_id);
@@ -264,6 +266,8 @@ impl ItemManager {
             description,
             children,
         ));
+
+        RefId(free_ref_id)
     }
 
     pub fn add_child<T>(

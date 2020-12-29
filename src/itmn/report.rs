@@ -90,26 +90,26 @@ impl Report for BasicReport {
         let proceed = |out: &mut dyn Write| -> io::Result<()> {
             writeln!(
                 out,
-                "{indent}{state} {id_repr}{description}{context} ~ {text}",
-                id_repr = match item.ref_id {
-                    Some(id) => format!("#{:>02}", id),
-                    None => format!("i{:>02}", item.internal_id),
-                },
+                "{indent}{state} {text} {context}{id_repr}{flags}",
                 indent = info.config.get_indent_spaces(info.indent),
                 state = match item.state {
                     ItemState::Todo => "o",
                     ItemState::Done => "x",
                     ItemState::Note => "-",
                 },
-                description = match item.description.is_empty() {
+                context = match item.context() {
+                    Some(ctx) => format!("@{} ", ctx),
+                    None => String::new(),
+                },
+                text = item.name,
+                id_repr = match item.ref_id {
+                    Some(id) => format!("#{:>02}", id),
+                    None => format!("i{:>02}", item.internal_id),
+                },
+                flags = match item.description.is_empty() {
                     true => "",
                     false => " (D)",
                 },
-                context = match item.context() {
-                    Some(ctx) => format!(" @{}", ctx),
-                    None => format!(""),
-                },
-                text = item.name,
             )?;
 
             match info.depth {
