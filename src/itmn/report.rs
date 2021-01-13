@@ -106,11 +106,41 @@ impl Report for BasicReport {
                     Some(id) => format!("#{:>02}", id),
                     None => format!("i{:>02}", item.internal_id),
                 },
-                flags = match item.description.is_empty() {
-                    true => "",
-                    false => " (D)",
-                },
+                flags = "",
+                // flags = match item.description.is_empty() {
+                //     true => "",
+                //     false => " (D)",
+                // },
             )?;
+
+            if !item.description.trim().is_empty() {
+                const MAX_SIZE: usize = 35;
+                let trimmed_desc = item.description.trim();
+
+                let maxpoint = if let Some((i, _)) = trimmed_desc
+                    .chars()
+                    .enumerate()
+                    .take(MAX_SIZE)
+                    .find(|(_, c)| matches!(c, '\n'))
+                {
+                    i
+                } else {
+                    trimmed_desc.len().min(MAX_SIZE + 1)
+                };
+
+                writeln!(
+                    out,
+                    "{indent}  :: {description}{trail}",
+                    indent = info.config.get_indent_spaces(info.indent),
+                    description = &trimmed_desc[..maxpoint],
+                    trail = if trimmed_desc.len() != maxpoint {
+                        "..."
+                    } else {
+                        ""
+                    }
+                )
+                .unwrap();
+            }
 
             match info.depth {
                 ReportDepth::Shallow => (),

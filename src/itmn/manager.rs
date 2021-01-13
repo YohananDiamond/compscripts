@@ -270,17 +270,17 @@ impl ItemManager {
         RefId(free_ref_id)
     }
 
-    pub fn add_child<T>(
+    pub fn add_child<Q>(
         &mut self,
-        query: T,
+        query: Q,
         name: &str,
         context: &str,
         state: ItemState,
         description: String,
         children: Vec<Item>,
-    ) -> Result<(), ()>
+    ) -> Result<RefId, ()>
     where
-        Self: Searchable<T, Data = Item>,
+        Self: Searchable<Q, Data = Item>,
     {
         let free_ref_id = core::misc::find_lowest_free_value(self.ref_ids());
         self.ref_ids.insert(free_ref_id);
@@ -298,7 +298,8 @@ impl ItemManager {
                 description,
                 children,
             ));
-            Ok(())
+
+            Ok(RefId(free_ref_id))
         } else {
             Err(())
         }

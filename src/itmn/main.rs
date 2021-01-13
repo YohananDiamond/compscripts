@@ -117,7 +117,7 @@ fn subcmd_add(
         description,
     }: ItemAddDetails,
 ) -> Result<ProgramResult, String> {
-    let RefId(new_id) = manager.add_item_on_root(
+    let RefId(ref_id) = manager.add_item_on_root(
         &name,
         &context.unwrap_or(String::new()),
         match note {
@@ -128,7 +128,7 @@ fn subcmd_add(
         Vec::new(),                              // children
     );
 
-    eprintln!("OK! RefId = {}", new_id);
+    eprintln!("Item Added! | RefID: {}", ref_id);
 
     Ok(ProgramResult {
         should_save: true,
@@ -294,20 +294,24 @@ fn subcmd_selection<R: Report>(
         }
         SelAct::Add(sargs) => {
             let mut proceed = || {
+                eprintln!("Adding items:");
+
                 for &id in &range {
-                    manager
+                    let RefId(ref_id) = manager
                         .add_child(
                             RefId(id),
                             &sargs.name,
-                            sargs.context.as_ref().unwrap_or(&String::new()),
+                            sargs.context.as_ref().map_or("", |s| s.as_str()),
                             match sargs.note {
                                 Some(false) | None => ItemState::Todo,
                                 Some(true) => ItemState::Note,
                             },
-                            sargs.description.clone().unwrap_or(String::new()),
+                            sargs.description.clone().unwrap_or_else(String::new),
                             Vec::new(), // children
                         )
                         .unwrap();
+
+                    eprintln!("* RefID: {}", ref_id);
                 }
 
                 Ok(ProgramResult {
@@ -319,7 +323,7 @@ fn subcmd_selection<R: Report>(
             if range.len() > 1 {
                 eprintln!("More than one item was selected. All of them will receive new identical children copies.");
 
-                if !confirm_with_default(false) {
+                if confirm_with_default(false) {
                     proceed()
                 } else {
                     Ok(ProgramResult {
