@@ -132,7 +132,7 @@ impl Report for BasicReport {
                     out,
                     "{indent}  :: {description}{trail}",
                     indent = info.config.get_indent_spaces(info.indent),
-                    description = &trimmed_desc[..maxpoint],
+                    description = &trimmed_desc[..maxpoint].trim(),
                     trail = if trimmed_desc.len() != maxpoint {
                         "..."
                     } else {

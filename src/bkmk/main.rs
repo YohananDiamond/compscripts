@@ -110,16 +110,21 @@ pub fn subcmd_add_from_file(manager: &mut BookmarkManager, param: FileParameters
         Err(e) => return ExitResult::from(format!("failed to open file: {}", e)),
     };
 
-    let mut contents = String::new();
-    if let Err(e) = file.read_to_string(&mut contents) {
-        return ExitResult::from(format!("failed to read file: {}", e));
-    }
+    let contents = {
+        let mut s = String::new();
+        match file.read_to_string(&mut s) {
+            Ok(_) => s,
+            Err(e) => return ExitResult::from(format!("failed to read file: {}", e)),
+        }
+    };
 
-    for line in contents.split("\n") {
-        if line.trim().len() != 0 {
-            if let Err(e) = manager.add_bookmark_from_url(line.to_string(), true) {
-                return ExitResult::from(e);
-            }
+    for url in contents
+        .split('\n')
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if let Err(e) = manager.add_bookmark_from_url(url.into(), true) {
+            return ExitResult::from(e);
         }
     }
 

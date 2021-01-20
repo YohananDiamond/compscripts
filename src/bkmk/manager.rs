@@ -98,6 +98,9 @@ impl BookmarkManager {
     }
 
     /// Adds a bookmark to the database, but gets its title automatically.
+    ///
+    /// ## Error
+    ///
     /// Returns an error if a bookmark with the same url already exists.
     pub fn add_bookmark_from_url(
         &mut self,
