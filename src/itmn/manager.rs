@@ -380,7 +380,7 @@ impl ItemManager {
             }
         }
     }
-    
+
     pub fn change_item_state<Q, F>(&mut self, id: Q, mapper: F) -> Result<(), ()>
     where
         Self: Searchable<Q, Data = Item>,
@@ -391,7 +391,7 @@ impl ItemManager {
 
         if new_state == ItemState::Done {
             item.ref_id = None;
-        } 
+        }
 
         item.state = new_state;
 

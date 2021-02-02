@@ -67,10 +67,7 @@ pub mod data_serialize {
     use std::io;
     use std::path::Path;
 
-    use super::{
-        Deserialize, Serialize,
-        JsonError,
-    };
+    use super::{Deserialize, JsonError, Serialize};
 
     pub fn import<'a, T>(string: &'a str) -> Result<Vec<T>, JsonError>
     where
@@ -92,7 +89,11 @@ pub mod data_serialize {
         }
     }
 
-    pub fn save_to_file<'a, T>(data: &'a [T], file: &'a Path, prettified: bool) -> Result<(), io::Error>
+    pub fn save_to_file<'a, T>(
+        data: &'a [T],
+        file: &'a Path,
+        prettified: bool,
+    ) -> Result<(), io::Error>
     where
         T: Deserialize<'a> + Serialize,
     {

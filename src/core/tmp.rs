@@ -14,10 +14,14 @@ pub fn make_tmp(extension: Option<&str>) -> PathBuf {
             .collect::<String>();
 
         let mut pathbuf = std::env::temp_dir();
-        pathbuf.push(format!("tmp.{}{}", path_str, match extension {
-            Some(ext) => format!(".{}", ext),
-            None => String::new(),
-        }));
+        pathbuf.push(format!(
+            "tmp.{}{}",
+            path_str,
+            match extension {
+                Some(ext) => format!(".{}", ext),
+                None => String::new(),
+            }
+        ));
 
         if !pathbuf.as_path().exists() {
             break pathbuf;

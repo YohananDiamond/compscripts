@@ -1,5 +1,5 @@
-use std::ops::Deref;
 use std::fmt;
+use std::ops::Deref;
 
 #[derive(Debug, Clone)]
 pub enum CowStr<'a> {

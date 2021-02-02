@@ -38,9 +38,7 @@ pub fn url_get_title(url: &str) -> Result<String, String> {
 
     let mut easy = Easy::new();
 
-    if let Err(e) = easy.url(url) {
-        return Err(format!("{}", e));
-    }
+    easy.url(url).map_err(ToString::to_string)?;
 
     {
         let mut transfer = easy.transfer();
@@ -49,9 +47,11 @@ pub fn url_get_title(url: &str) -> Result<String, String> {
                 vec.extend_from_slice(data);
                 Ok(data.len())
             })
-            .unwrap(); // TODO: switch for an "expect"
+            .unwrap();
 
-        transfer.perform().unwrap(); // TODO: should I really unwrap this?
+        transfer
+            .perform()
+            .expect("Failed to download/write to buffer");
     }
 
     let code = easy.response_code().unwrap();
