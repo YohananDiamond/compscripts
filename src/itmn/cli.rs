@@ -32,9 +32,16 @@ pub enum SubCmd {
     Next,
     #[clap(about = "Add an item")]
     Add(ItemAddDetails),
-    #[clap(aliases = &["s", "sel", "sri"], about = "Select items by reference ID and do something with them")]
-    // TODO:
+    #[clap(
+        aliases = &["s", "sel", "sri"],
+        about = "Select items by reference ID and do something with them",
+    )]
     SelRefID(SelectionDetails),
+    #[clap(
+        aliases = &["flatlist", "fl"],
+        about = "List all visible items, prepended by the ID",
+    )]
+    FlatList,
     // #[clap(aliases = &["sel-internal", "sii"], about = "Select items by internal ID and do something with them")]
     // TODO: SelInternalID(SelectionDetails),
     // TODO: Search,

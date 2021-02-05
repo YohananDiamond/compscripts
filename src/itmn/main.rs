@@ -17,22 +17,12 @@ use manager::{Interactable, Searchable};
 use manager::{ItemManager, ManagerError, ProgramResult};
 
 mod report;
-use report::{Report, ReportConfig, ReportDepth, ReportInfo};
+use report::{Report, ReportConfig, ReportDepth, ReportInfo, FlatReport};
 
 use core::data::data_serialize;
 use core::error::ExitCode;
 use core::misc::confirm_with_default;
 use core::tmp;
-
-fn validate_parsed_string(string: &str) -> &str {
-    for ch in string.chars() {
-        if !matches!(ch, '\n' | ' ' | '\t' | '\r') {
-            return string;
-        }
-    }
-
-    "[]"
-}
 
 fn main() -> ExitCode {
     let itmn_file = std::env::var("ITMN_FILE")
@@ -91,6 +81,7 @@ fn main() -> ExitCode {
             SubCmd::Add(args) => subcmd_add(manager, args),
             SubCmd::List => subcmd_list::<UsedReport>(manager, &report_cfg),
             SubCmd::Next => subcmd_next::<UsedReport>(manager, &report_cfg),
+            SubCmd::FlatList => subcmd_flatlist(manager, &report_cfg),
         };
 
         match result {
@@ -151,6 +142,36 @@ fn subcmd_list<R: Report>(
 
     R::report(
         "All items (surface)",
+        &mut items.into_iter(),
+        &ReportInfo {
+            config: report_cfg,
+            indent: 0,
+            filter: Some(&|i: &Item| i.state != ItemState::Done),
+            depth: ReportDepth::Tree,
+        },
+        &mut io::stdout(),
+    )
+    .unwrap();
+
+    Ok(ProgramResult {
+        should_save: false,
+        exit_status: 0,
+    })
+}
+
+/// A function for the `flat-list` subcommand.
+fn subcmd_flatlist(
+    manager: &ItemManager,
+    report_cfg: &ReportConfig,
+) -> Result<ProgramResult, String> {
+    let items: Vec<&Item> = manager
+        .surface_ref_ids()
+        .iter()
+        .map(|&i| manager.find(i).unwrap())
+        .collect();
+
+    FlatReport::report(
+        "All items (flat report)",
         &mut items.into_iter(),
         &ReportInfo {
             config: report_cfg,
@@ -236,7 +257,7 @@ fn subcmd_selection<R: Report>(
         SelAct::Modify(sargs) => {
             let proceed = |manager: &mut ItemManager| {
                 for &id in &range {
-                    // Now that I think of it, cloning the same thing over and over might be too expensive. But I don't know if it's better to try something like Rc to improve this.
+                    // TODO: Now that I think of it, cloning the same thing over and over might be too expensive. But I don't know if it's better to try something like Rc to improve this.
                     manager.interact_mut(RefId(id), |item| sargs.clone().mod_item(item));
                 }
 
@@ -740,4 +761,14 @@ A is a child of B, but both A and B are on the selection."#,
             }
         }
     }
+}
+
+fn validate_parsed_string(string: &str) -> &str {
+    for ch in string.chars() {
+        if !matches!(ch, '\n' | ' ' | '\t' | '\r') {
+            return string;
+        }
+    }
+
+    "[]"
 }

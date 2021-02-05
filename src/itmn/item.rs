@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Copy, Clone)]
 /// An item state describes whether said item is actionable (to do / done) or a note. More possible states might be
 /// added on the future.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Copy, Clone)]
 pub enum ItemState {
     /// The item is actionable, and is not yet marked as done.
     Todo,
@@ -14,8 +14,8 @@ pub enum ItemState {
     Note,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 /// Used for reference ID search operations
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RefId(pub u32);
 
 impl From<u32> for RefId {
@@ -30,8 +30,8 @@ impl Into<u32> for RefId {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 /// Used for internal ID search operations
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct InternalId(pub u32);
 
 impl Into<u32> for InternalId {
@@ -46,8 +46,8 @@ impl From<u32> for InternalId {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 /// The main data unit used to store information on this program's database.
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct Item {
     /// The public name of the item. It usually appears on most reports.
     pub name: String,

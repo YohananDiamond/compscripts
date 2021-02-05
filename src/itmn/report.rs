@@ -196,3 +196,58 @@ impl Report for BasicReport {
         Ok(())
     }
 }
+
+pub struct FlatReport;
+impl Report for FlatReport {
+    fn display(item: &Item, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()> {
+        let proceed = |out: &mut dyn Write| -> io::Result<()> {
+            writeln!(
+                out,
+                "{state} {text} {context}{id_repr}{flags}",
+                state = match item.state {
+                    ItemState::Todo => "o",
+                    ItemState::Done => "x",
+                    ItemState::Note => "-",
+                },
+                context = match item.context() {
+                    Some(ctx) => format!("@{} ", ctx),
+                    None => String::new(),
+                },
+                text = item.name,
+                id_repr = match item.ref_id {
+                    Some(id) => format!("#{:>02}", id),
+                    None => format!("i{:>02}", item.internal_id),
+                },
+                flags = "",
+            )?;
+
+            let mut info = info.clone();
+            info.indent += 1;
+            Self::display_all(&mut item.children.iter(), &info, out)?;
+
+            Ok(())
+        };
+
+        if let Some(filter) = info.filter {
+            if filter(item) {
+                proceed(out)?;
+            }
+        } else {
+            proceed(out)?;
+        }
+
+        Ok(())
+    }
+
+    fn display_all(
+        items: &mut dyn Iterator<Item = &Item>,
+        info: &ReportInfo,
+        out: &mut dyn Write,
+    ) -> io::Result<()> {
+        for item in items {
+            Self::display(item, info, out)?;
+        }
+
+        Ok(())
+    }
+}

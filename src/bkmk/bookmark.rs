@@ -38,7 +38,7 @@ pub fn url_get_title(url: &str) -> Result<String, String> {
 
     let mut easy = Easy::new();
 
-    easy.url(url).map_err(ToString::to_string)?;
+    easy.url(url).map_err(|e| format!("Curl error: {}", e))?;
 
     {
         let mut transfer = easy.transfer();
