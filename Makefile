@@ -1,20 +1,18 @@
 DESTDIR := ~/.local/bin
-BUILD_TYPE := release
+RELEASE := true
+BINARIES := bkmk itmn
 
 output:
-	cargo build --bin bkmk --$(BUILD_TYPE)
-	cargo build --bin itmn --$(BUILD_TYPE)
+	if [ $(RELEASE) = true ]; then cargo build --release; else cargo build; fi
 
 install: output
 	@echo Installing to $(DESTDIR)...
-	cd target/release && cp bkmk itmn -t $(DESTDIR)
+	cd target/release && cp $(BINARIES) -t $(DESTDIR)
 
 check:
-	cargo check --bin bkmk
-	cargo check --bin itmn
+	cargo check
 
 test:
-	cargo test --bin bkmk
-	cargo test --bin itmn
+	cargo test
 
 .PHONY: output install check

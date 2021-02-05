@@ -17,12 +17,12 @@ use manager::{Interactable, Searchable};
 use manager::{ItemManager, ManagerError, ProgramResult};
 
 mod report;
-use report::{Report, ReportConfig, ReportDepth, ReportInfo, FlatReport};
+use report::{FlatReport, Report, ReportConfig, ReportDepth, ReportInfo};
 
-use core::data::data_serialize;
-use core::error::ExitCode;
-use core::misc::confirm_with_default;
-use core::tmp;
+use utils::data::data_serialize;
+use utils::error::ExitCode;
+use utils::misc::confirm_with_default;
+use utils::tmp;
 
 fn main() -> ExitCode {
     let itmn_file = std::env::var("ITMN_FILE")
@@ -33,7 +33,7 @@ fn main() -> ExitCode {
     let path_string = options.path.unwrap_or(itmn_file);
     let path = Path::new(&path_string);
 
-    let contents = match core::io::touch_read(&path) {
+    let contents = match utils::io::touch_read(&path) {
         Ok(string) => string,
         Err(e) => {
             eprintln!("Failed to load file: {}", e);
@@ -231,7 +231,7 @@ fn subcmd_selection<R: Report>(
 ) -> Result<ProgramResult, String> {
     type SelAct = SelectionAction;
 
-    let range = match core::misc::parse_range_str(&args.range) {
+    let range = match utils::misc::parse_range_str(&args.range) {
         Ok(vec) => {
             // check if empty
             if vec.is_empty() {

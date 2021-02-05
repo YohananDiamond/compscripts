@@ -1,10 +1,10 @@
-use core::data::{Id, Searchable};
 use curl::easy::Easy;
 use select::document::Document;
 use select::node::Data;
 use select::predicate::Name;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use utils::data::{Id, Searchable};
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct Bookmark {

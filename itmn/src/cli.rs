@@ -7,7 +7,7 @@
 use clap::Clap;
 
 use crate::item::{Item, ItemState};
-use core::cowstr::CowStr;
+use utils::cowstr::CowStr;
 
 #[derive(Debug, Clap)]
 /// The entry point for the

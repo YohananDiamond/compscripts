@@ -3,7 +3,7 @@
 // TODO: add a way to recursively sort items, like what was done with filters.
 
 use crate::item::{Item, ItemState};
-use core::cowstr::CowStr;
+use utils::cowstr::CowStr;
 
 use std::io;
 use std::io::Write;

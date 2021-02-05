@@ -5,9 +5,9 @@ use std::path::Path;
 
 use crate::item::{InternalId, Item, ItemState, RefId};
 
-use core::data::data_serialize;
+use utils::data::data_serialize;
 
-/// The core structure of the database.
+/// The utils structure of the database.
 pub struct ItemManager {
     /// The "root" of the data managed by this database. All items are contained here.
     pub data: Vec<Item>,
@@ -206,7 +206,7 @@ impl ItemManager {
                 ItemState::Done => (),
                 ItemState::Todo | ItemState::Note => {
                     if item.ref_id.is_none() {
-                        let id = core::misc::find_lowest_free_value(&ref_set);
+                        let id = utils::misc::find_lowest_free_value(&ref_set);
                         item.ref_id = Some(id);
                         ref_set.insert(id);
                     }
@@ -251,10 +251,10 @@ impl ItemManager {
         children: Vec<Item>,
     ) -> RefId {
         // Might crash with an overflow but seriously, who is gonna have 4,294,967,296 items in a lifetime?
-        let free_ref_id = core::misc::find_lowest_free_value(&self.ref_ids);
+        let free_ref_id = utils::misc::find_lowest_free_value(&self.ref_ids);
         self.ref_ids.insert(free_ref_id);
 
-        let free_internal_id = core::misc::find_highest_free_value(&self.internal_ids);
+        let free_internal_id = utils::misc::find_highest_free_value(&self.internal_ids);
         self.internal_ids.insert(free_internal_id);
 
         self.data.push(Item::new(
@@ -282,10 +282,10 @@ impl ItemManager {
     where
         Self: Searchable<Q, Data = Item>,
     {
-        let free_ref_id = core::misc::find_lowest_free_value(self.ref_ids());
+        let free_ref_id = utils::misc::find_lowest_free_value(self.ref_ids());
         self.ref_ids.insert(free_ref_id);
 
-        let free_internal_id = core::misc::find_highest_free_value(self.internal_ids());
+        let free_internal_id = utils::misc::find_highest_free_value(self.internal_ids());
         self.internal_ids.insert(free_internal_id.into());
 
         if let Some(i) = self.find_mut(query) {

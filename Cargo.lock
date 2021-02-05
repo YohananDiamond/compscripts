@@ -48,6 +48,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
+name = "bkmk"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "curl",
+ "rand",
+ "regex",
+ "select",
+ "serde",
+ "serde_json",
+ "utils",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -194,6 +209,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c398b2b113b55809ceb9ee3e753fcbac793f1956663f3c36549c1346015c2afe"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "itmn"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "utils",
 ]
 
 [[package]]
@@ -502,20 +527,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26412eb97c6b088a6997e05f69403a802a92d520de2f8e63c2b65f9e0f47c4e8"
 
 [[package]]
-name = "rust-scripts"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "curl",
- "rand",
- "regex",
- "select",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "ryu"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -715,6 +726,20 @@ name = "utf-8"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05e42f7c18b8f902290b009cde6d651262f956c98bc51bca4cd1d511c9cd85c7"
+
+[[package]]
+name = "utils"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "curl",
+ "rand",
+ "regex",
+ "select",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "vcpkg"

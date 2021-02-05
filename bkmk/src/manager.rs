@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use crate::bookmark::Bookmark;
-use core::data::{Id, JsonSerializer, Manager};
+use utils::data::{Id, JsonSerializer, Manager};
 
 pub struct BookmarkManager {
     data: Vec<Bookmark>,
@@ -82,7 +82,7 @@ impl BookmarkManager {
             return Err(format!("Repeated url with bookmark #{}", id));
         }
 
-        let free_id = core::misc::find_lowest_free_value(&self.used_ids);
+        let free_id = utils::misc::find_lowest_free_value(&self.used_ids);
 
         self.data_mut().push(Bookmark {
             id: free_id,
@@ -117,7 +117,7 @@ impl BookmarkManager {
                 if read_line {
                     eprintln!("Failed to get title: {}", e);
                     eprintln!("  Url: {:?}", url);
-                    core::io::read_line("  Type a new title: ").unwrap()
+                    utils::io::read_line("  Type a new title: ").unwrap()
                 } else {
                     return Err(format!("failed to get title: {}", e));
                 }
@@ -126,7 +126,7 @@ impl BookmarkManager {
         .trim()
         .to_string();
 
-        let free_id = core::misc::find_lowest_free_value(&self.used_ids);
+        let free_id = utils::misc::find_lowest_free_value(&self.used_ids);
 
         eprintln!("New bookmark: {:?} ({:?})", title, url);
 

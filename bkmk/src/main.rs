@@ -13,10 +13,10 @@ use bookmark::Bookmark;
 mod manager;
 use manager::BookmarkManager;
 
-use core::aliases::getenv;
-use core::data::{JsonSerializer, Manager};
-use core::error::{ExitCode, ExitResult};
-use core::misc::fzagnostic;
+use utils::aliases::getenv;
+use utils::data::{JsonSerializer, Manager};
+use utils::error::{ExitCode, ExitResult};
+use utils::misc::fzagnostic;
 
 fn fallback_string_if_needed<'a>(string: &'a str) -> &'a str {
     for ch in string.chars() {
@@ -56,7 +56,7 @@ fn main() -> ExitCode {
     let path_string = options.path.unwrap_or(bkmk_file);
     let path = Path::new(&path_string);
 
-    let contents = match core::io::touch_read(&path) {
+    let contents = match utils::io::touch_read(&path) {
         Ok(string) => string,
         Err(e) => {
             eprintln!("Failed to load file: {}", e);
@@ -105,7 +105,7 @@ pub fn subcmd_add(manager: &mut BookmarkManager, param: AddParameters) -> ExitRe
 
 pub fn subcmd_add_from_file(manager: &mut BookmarkManager, param: FileParameters) -> ExitResult {
     let path = Path::new(&param.file);
-    let mut file = match core::io::touch_and_open(path) {
+    let mut file = match utils::io::touch_and_open(path) {
         Ok(file) => file,
         Err(e) => return ExitResult::from(format!("failed to open file: {}", e)),
     };
