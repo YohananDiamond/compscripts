@@ -5,14 +5,18 @@ use std::hash::Hash;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
+use crate::error::CliError;
+
 /// Runs the `fzagnostic` command with data from the arguments.
 ///
 /// Returns Ok with the choice if everything went successfully.
 ///
 /// Returns Err with the error if the error was not intended.
 /// Returns Err with an empty string if fzagnostic was cancelled manually. (Ctrl-C, ESC etc.)
-pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Result<String, String> {
-    // TODO: use Iterator
+pub fn fzagnostic<'a, C>(prompt: &str, choices: C, height: u32) -> Result<String, CliError>
+where
+    C: IntoIterator<Item = &'a str>,
+{
     match Command::new("fzagnostic")
         .args(&["-h", &format!("{}", height), "-p", prompt])
         .stdin(Stdio::piped())
@@ -22,24 +26,32 @@ pub fn fzagnostic(prompt: &str, input: &str, height: u32) -> Result<String, Stri
         Ok(mut child) => {
             let stdin = child.stdin.as_mut().unwrap();
 
-            if let Err(e) = write!(stdin, "{}", input) {
-                Err(format!(
-                    "fzagnostic: failed to write to process stdin: {}",
-                    e
-                ))
-            } else {
-                if child.wait().unwrap().success() {
-                    let mut choice = String::new();
-                    match child.stdout.as_mut().unwrap().read_to_string(&mut choice) {
-                        Ok(_) => Ok(choice),
-                        Err(e) => Err(format!("fzagnostic: failed to get process stdout: {}", e)),
-                    }
-                } else {
-                    Err(String::new())
+            for line in choices.into_iter() {
+                write!(stdin, "{}", line).map_err(|why| {
+                    CliError::from_display(format!(
+                        "fzagnostic: failed to write to process stdin: {}",
+                        why
+                    ))
+                })?;
+            }
+
+            if child.wait().unwrap().success() {
+                let mut choice = String::new();
+                match child.stdout.as_mut().unwrap().read_to_string(&mut choice) {
+                    Ok(_) => Ok(choice),
+                    Err(why) => Err(CliError::from_display(format!(
+                        "fzagnostic: failed to get process stdout: {}",
+                        why
+                    ))),
                 }
+            } else {
+                Err(CliError::Silent)
             }
         }
-        Err(e) => Err(format!("fzagnostic: failed to run command: {}", e)),
+        Err(why) => Err(CliError::from_display(format!(
+            "fzagnostic: failed to run command: {}",
+            why
+        ))),
     }
 }
 

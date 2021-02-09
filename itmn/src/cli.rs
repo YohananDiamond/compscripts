@@ -139,7 +139,32 @@ impl ItemBatchMod {
         vec
     }
 
-    /// Apply modifications to an item.
+    /// Apply modifications to an item, without consuming self.
+    ///
+    /// Might clone some of the contents of self, but not necessarily all.
+    pub fn mod_item_by_ref(&self, item: &mut Item) {
+        if let Some(ref name) = self.name {
+            item.name = name.clone();
+        }
+
+        if let Some(ref context) = self.context {
+            item.set_context(&context);
+        }
+
+        if let Some(note) = self.note {
+            if note {
+                item.state = ItemState::Note;
+            } else {
+                // only change to active/pending if item is actually a note
+                if let ItemState::Note = item.state {
+                    item.state = ItemState::Todo;
+                }
+            }
+        }
+    }
+
+    /// Apply modifications to an item, consuming self.
+    #[allow(unused)]
     pub fn mod_item(self, item: &mut Item) {
         if let Some(name) = self.name {
             item.name = name;

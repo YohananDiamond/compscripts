@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::io;
 use std::path::Path;
 
 use crate::aliases::JsonError;
@@ -20,25 +19,25 @@ pub trait Manager {
     /// The searchable data type used on this manager.
     type Data: Searchable;
 
-    /// Returns an immutable reference to the data inside the manager.
+    /// Get an immutable reference to the data inside the manager.
     fn data(&self) -> &[Self::Data];
 
-    /// Returns a mutable reference to the data inside the manager.
+    /// Get a mutable reference to the data inside the manager.
     fn data_mut(&mut self) -> &mut Vec<Self::Data>;
 
-    /// TODO: @doc
+    /// Find an instance of the item via its reference ID and return an immutable reference to it.
     fn find(&self, ref_id: Id) -> Option<&Self::Data> {
         self.data().iter().find(|i| i.ref_id() == Some(ref_id))
     }
 
-    /// TODO: @doc
+    /// Find an instance of the item via its reference ID and return a mutable reference to it.
     fn find_mut(&mut self, ref_id: Id) -> Option<&mut Self::Data> {
         self.data_mut()
             .iter_mut()
             .find(|i| i.ref_id() == Some(ref_id))
     }
 
-    /// Interacts with an item by its reference ID.
+    /// Interact with an item by its reference ID.
     fn interact<T, F: Fn(&Self::Data) -> T>(&self, ref_id: Id, interaction: F) -> Option<T> {
         let item = self.data().iter().find(|i| i.ref_id() == Some(ref_id))?;
         Some(interaction(item))
@@ -54,21 +53,36 @@ pub trait Manager {
             .data_mut()
             .iter_mut()
             .find(|i| i.ref_id() == Some(ref_id))?;
+
         let result = interaction(item);
         self.after_interact_mut_hook();
         Some(result)
     }
 
-    /// TODO: @doc
+    /// A hook that is ran after a mutable interaction is made.
     fn after_interact_mut_hook(&mut self);
 }
 
 pub mod data_serialize {
-    use std::io;
     use std::path::Path;
 
     use super::{Deserialize, JsonError, Serialize};
 
+    pub enum SaveToFileError {
+        Saving(std::io::Error),
+        Exporting(serde_json::Error),
+    }
+
+    impl std::fmt::Display for SaveToFileError {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Saving(e) => write!(fmt, "Error while saving: {}", e),
+                Self::Exporting(e) => write!(fmt, "Error while exporting: {}", e),
+            }
+        }
+    }
+
+    /// Import a vector of T from a json string.
     pub fn import<'a, T>(string: &'a str) -> Result<Vec<T>, JsonError>
     where
         T: Deserialize<'a> + Serialize,
@@ -76,62 +90,62 @@ pub mod data_serialize {
         serde_json::from_str(string)
     }
 
-    pub fn export<'a, T>(data: &'a [T], prettified: bool) -> String
+    /// Export a T slice into a json string.
+    pub fn export<'a, T>(data: &'a [T], prettified: bool) -> serde_json::Result<String>
     where
         T: Deserialize<'a> + Serialize,
     {
         if prettified {
-            // TODO: see if this unwrap is really safe
-            serde_json::to_string_pretty(data).unwrap()
+            serde_json::to_string_pretty(data)
         } else {
-            // TODO: see if this unwrap is really safe
-            serde_json::to_string(data).unwrap()
+            serde_json::to_string(data)
         }
     }
 
+    /// Export a T slice into a json string and then save it into a file.
     pub fn save_to_file<'a, T>(
         data: &'a [T],
         file: &'a Path,
         prettified: bool,
-    ) -> Result<(), io::Error>
+    ) -> Result<(), SaveToFileError>
     where
         T: Deserialize<'a> + Serialize,
     {
-        let export_string = export(data, prettified);
-        std::fs::write(file, &export_string)
+        let export_string = export(data, prettified).map_err(|e| SaveToFileError::Exporting(e))?;
+        std::fs::write(file, &export_string).map_err(|e| SaveToFileError::Saving(e))?;
+
+        Ok(())
     }
 }
 
+/// A trait for exporting data to json.
 pub trait JsonSerializer<'a>: Manager
 where
     <Self as Manager>::Data: Deserialize<'a> + Serialize,
 {
-    /// TODO: @doc
-    fn export(&self, prettified: bool) -> String {
-        if prettified {
-            serde_json::to_string_pretty(self.data()).unwrap()
-        } else {
-            serde_json::to_string(self.data()).unwrap()
-        }
+    /// Export the data into a json-formatted string.
+    fn export(&'a self, prettified: bool) -> serde_json::Result<String> {
+        data_serialize::export(self.data(), prettified)
     }
 
-    /// TODO: @doc
+    /// Import the data from a json-formatted string.
     fn import(string: &'a str) -> Result<Vec<Self::Data>, JsonError> {
-        serde_json::from_str(string)
+        data_serialize::import(string)
     }
 
-    /// TODO: @doc
-    fn save_to_file(&self, file: &Path, prettified: bool) -> Result<(), io::Error> {
-        let export = self.export(prettified);
-        std::fs::write(file, &export)
+    /// Export the data to json and save it to a file.
+    fn save_to_file(
+        &'a self,
+        file: &'a Path,
+        prettified: bool,
+    ) -> Result<(), data_serialize::SaveToFileError> {
+        data_serialize::save_to_file(self.data(), file, prettified)
     }
 }
 
-impl<'a, T: Manager> JsonSerializer<'a> for T
+impl<'a, M> JsonSerializer<'a> for M
 where
-    T: Manager,
-    <T as Manager>::Data: Deserialize<'a> + Serialize,
+    M: Manager,
+    <M as Manager>::Data: Deserialize<'a> + Serialize,
 {
 }
-
-// TODO: maybe make tests

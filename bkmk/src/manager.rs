@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use crate::bookmark::Bookmark;
-use utils::data::{Id, JsonSerializer, Manager};
+use utils::data::{data_serialize::SaveToFileError, Id, JsonSerializer, Manager};
 
 pub struct BookmarkManager {
     data: Vec<Bookmark>,
@@ -60,9 +60,9 @@ impl BookmarkManager {
         };
 
         check_repeated(url).or_else(|| {
-            if url.chars().nth(url.len() - 1).unwrap() == '/' {
+            if url.chars().last().unwrap() == '/' {
                 // remove trailing slash
-                check_repeated(&url[0..(url.len() - 1)])
+                check_repeated(&url[..url.len() - 1])
             } else {
                 // add trailing slash
                 check_repeated(&format!("{}/", url))
@@ -91,6 +91,7 @@ impl BookmarkManager {
             tags: tags,
             archived: false,
         });
+
         self.used_ids.insert(free_id);
         self.after_interact_mut_hook();
 
@@ -99,14 +100,14 @@ impl BookmarkManager {
 
     /// Adds a bookmark to the database, but gets its title automatically.
     ///
+    /// ## Options
+    ///
+    /// If `read_line` is true and the url couldn't be fetched, the user will be prompted to type a new title.
+    ///
     /// ## Error
     ///
     /// Returns an error if a bookmark with the same url already exists.
-    pub fn add_bookmark_from_url(
-        &mut self,
-        url: String,
-        read_line: bool, // TODO: document this
-    ) -> Result<(), String> {
+    pub fn add_bookmark_from_url(&mut self, url: String, read_line: bool) -> Result<(), String> {
         if let Some(id) = self.already_has_url(&url) {
             return Err(format!("Repeated url with bookmark #{} ({})", id, url));
         }
@@ -117,14 +118,25 @@ impl BookmarkManager {
                 if read_line {
                     eprintln!("Failed to get title: {}", e);
                     eprintln!("  Url: {:?}", url);
-                    utils::io::read_line("  Type a new title: ").unwrap()
+
+                    let line =
+                        utils::io::read_line("  Type a new title (type nothing to cancel): ")
+                            .map_err(|e| format!("failed to read line: {}", e))?;
+
+                    if line.is_empty() {
+                        return Err(format!("empty title"));
+                    } else {
+                        line
+                    }
                 } else {
                     return Err(format!("failed to get title: {}", e));
                 }
             }
         }
         .trim()
-        .to_string();
+        .chars()
+        .filter(|c| matches!(c, '\n' | ' ' | '\t' | '\r'))
+        .collect::<String>();
 
         let free_id = utils::misc::find_lowest_free_value(&self.used_ids);
 
@@ -143,7 +155,7 @@ impl BookmarkManager {
         Ok(())
     }
 
-    pub fn save_if_modified(&self, path: &Path) -> Result<(), std::io::Error> {
+    pub fn save_if_modified(&self, path: &Path) -> Result<(), SaveToFileError> {
         if self.modified {
             self.save_to_file(path, true)
         } else {

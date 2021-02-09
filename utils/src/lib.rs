@@ -1,4 +1,5 @@
 #![feature(termination_trait_lib)]
+#![feature(try_trait)]
 
 pub mod aliases;
 pub mod cowstr;

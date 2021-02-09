@@ -35,17 +35,17 @@ fn main() -> ExitCode {
 
     let contents = match utils::io::touch_read(&path) {
         Ok(string) => string,
-        Err(e) => {
-            eprintln!("Failed to load file: {}", e);
-            return ExitCode(1);
+        Err(why) => {
+            eprintln!("Failed to load file: {}", why);
+            return ExitCode::new(1);
         }
     };
 
     let data: Vec<Item> = match data_serialize::import(validate_parsed_string(&contents)) {
         Ok(data) => data,
-        Err(e) => {
-            eprintln!("Failed to parse file: {}", e);
-            return ExitCode(1);
+        Err(why) => {
+            eprintln!("Failed to parse file: {}", why);
+            return ExitCode::new(1);
         }
     };
 
@@ -56,14 +56,14 @@ fn main() -> ExitCode {
                 "Repeated reference ID in file: {}; it'll have to be removed manually.",
                 id
             );
-            return ExitCode(1);
+            return ExitCode::new(1);
         }
         Err(ManagerError::RepeatedInternalID(InternalId(id))) => {
             eprintln!(
                 "Repeated internal ID in file: {}; it'll have to be removed manually.",
                 id
             );
-            return ExitCode(1);
+            return ExitCode::new(1);
         }
     };
 
@@ -96,7 +96,7 @@ fn main() -> ExitCode {
         }
     });
 
-    ExitCode(code)
+    ExitCode::new(code)
 }
 
 fn subcmd_add(
@@ -257,8 +257,7 @@ fn subcmd_selection<R: Report>(
         SelAct::Modify(sargs) => {
             let proceed = |manager: &mut ItemManager| {
                 for &id in &range {
-                    // TODO: Now that I think of it, cloning the same thing over and over might be too expensive. But I don't know if it's better to try something like Rc to improve this.
-                    manager.interact_mut(RefId(id), |item| sargs.clone().mod_item(item));
+                    manager.interact_mut(RefId(id), |item| sargs.mod_item_by_ref(item));
                 }
 
                 Ok(ProgramResult {

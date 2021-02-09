@@ -15,7 +15,7 @@ use manager::BookmarkManager;
 
 use utils::aliases::getenv;
 use utils::data::{JsonSerializer, Manager};
-use utils::error::{ExitCode, ExitResult};
+use utils::error::{CliResult, ExitCode};
 use utils::misc::fzagnostic;
 
 fn fallback_string_if_needed<'a>(string: &'a str) -> &'a str {
@@ -33,13 +33,12 @@ fn main() -> ExitCode {
 
     let cache_dir: String = std::env::var("XDG_CACHE_DIR")
         .ok()
-        .or_else(|| Some(format!("{}/.cache", home)))
-        .unwrap();
+        .unwrap_or_else(|| format!("{}/.cache", home));
+
     let data_dir: String = std::env::var("XDG_DATA_HOME")
         .ok()
         .or_else(|| std::env::var("XDG_DATA_DIR").ok())
-        .or_else(|| Some(format!("{}/.local/share", home)))
-        .unwrap();
+        .unwrap_or_else(|| format!("{}/.local/share", home));
 
     let fallback_file = format!("{}/bkmk", data_dir);
 
@@ -49,72 +48,64 @@ fn main() -> ExitCode {
         Ok(var) => var,
     };
 
+    // TODO: lock file
     let _mutex_file = format!("{}/bkmk-mutex", cache_dir);
 
     let options = cli::Options::parse();
 
-    let path_string = options.path.unwrap_or(bkmk_file);
-    let path = Path::new(&path_string);
+    // try blocks :))
+    (|| -> CliResult {
+        let path_string = options.path.unwrap_or(bkmk_file);
+        let path = Path::new(&path_string);
 
-    let contents = match utils::io::touch_read(&path) {
-        Ok(string) => string,
-        Err(e) => {
-            eprintln!("Failed to load file: {}", e);
-            return ExitResult::from(format!("failed to load file")).into();
-        }
-    };
+        let contents = utils::io::touch_read(&path).or_else(|why| {
+            CliResult::display_err(format!("Failed to load file: {}", why)).into()
+        })?;
 
-    let new_contents = fallback_string_if_needed(&contents);
+        let new_contents = fallback_string_if_needed(&contents);
 
-    let data: Vec<Bookmark> = match BookmarkManager::import(new_contents) {
-        Ok(i) => i,
-        Err(e) => {
-            eprintln!("Failed to parse file: {}", e);
-            return ExitCode(1);
-        }
-    };
+        let data: Vec<Bookmark> = BookmarkManager::import(new_contents).or_else(|why| {
+            CliResult::display_err(format!("Failed to parse file: {}", why)).into()
+        })?;
 
-    let mut manager = match BookmarkManager::new(data) {
-        Ok(m) => m,
-        Err(e) => return ExitResult::from(e).into(),
-    };
+        let mut manager =
+            BookmarkManager::new(data).or_else(|err| CliResult::display_err(err).into())?;
 
-    let result = match options.subcmd {
-        SubCmd::Add(param) => subcmd_add(&mut manager, param),
-        SubCmd::AddFromFile(param) => subcmd_add_from_file(&mut manager, param),
-        SubCmd::Menu => subcmd_menu(&mut manager),
-    };
+        match options.subcmd {
+            SubCmd::Add(param) => subcmd_add(&mut manager, param),
+            SubCmd::AddFromFile(param) => subcmd_add_from_file(&mut manager, param),
+            SubCmd::Menu => subcmd_menu(&mut manager),
+        }?;
 
-    ExitCode::from(result).and_then(|| {
-        if let Err(e) = manager.save_if_modified(&path) {
-            eprintln!("Failed to save changes to file: {}", e);
-            ExitCode(1)
-        } else {
-            ExitCode(0)
-        }
-    })
+        manager.save_if_modified(&path).or_else(|why| {
+            CliResult::display_err(format!("Failed to save changes to file: {}", why)).into()
+        })?;
+
+        CliResult::EMPTY_OK
+    })()
+    .process()
 }
 
-pub fn subcmd_add(manager: &mut BookmarkManager, param: AddParameters) -> ExitResult {
-    ExitResult::from_display_result(if let Some(title) = param.title {
+pub fn subcmd_add(manager: &mut BookmarkManager, param: AddParameters) -> CliResult {
+    CliResult::from_display_result(if let Some(title) = param.title {
         manager.add_bookmark(title, param.url, Vec::new())
     } else {
         manager.add_bookmark_from_url(param.url, true)
     })
 }
 
-pub fn subcmd_add_from_file(manager: &mut BookmarkManager, param: FileParameters) -> ExitResult {
+pub fn subcmd_add_from_file(manager: &mut BookmarkManager, param: FileParameters) -> CliResult {
     let path = Path::new(&param.file);
     let mut file = match utils::io::touch_and_open(path) {
         Ok(file) => file,
-        Err(e) => return ExitResult::from(format!("failed to open file: {}", e)),
+        Err(e) => return CliResult::display_err(format!("failed to open file: {}", e)),
     };
 
     let contents = {
         let mut s = String::new();
         match file.read_to_string(&mut s) {
             Ok(_) => s,
-            Err(e) => return ExitResult::from(format!("failed to read file: {}", e)),
+            Err(e) => return CliResult::display_err(format!("failed to read file: {}", e)),
         }
     };
 
@@ -124,30 +115,32 @@ pub fn subcmd_add_from_file(manager: &mut BookmarkManager, param: FileParameters
         .filter(|line| !line.is_empty())
     {
         if let Err(e) = manager.add_bookmark_from_url(url.into(), true) {
-            return ExitResult::from(e);
+            return CliResult::display_err(e);
         }
     }
 
-    ExitResult::Ok
+    CliResult::EMPTY_OK
 }
 
-pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
+pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
     let not_archived: Vec<&Bookmark> = manager.data().iter().filter(|b| !b.archived).collect();
 
     if not_archived.len() == 0 {
-        return ExitResult::from(format!("There are no unarchived bookmarks to select"));
+        return CliResult::display_err(format!("There are no unarchived bookmarks to select"));
     }
 
     let chosen_id = {
-        // TODO: align selection numbers
         let input = not_archived
             .iter()
             .enumerate()
             .map(|(i, b)| format!("{:>3} {:<95} ({})", i, b.name, b.url))
-            .collect::<Vec<String>>()
-            .join("\n");
+            .collect::<Vec<_>>();
 
-        match fzagnostic(&format!("Bookmark ({}):", not_archived.len()), &input, 30) {
+        match fzagnostic(
+            &format!("Bookmark ({}):", not_archived.len()),
+            input.iter().map(String::as_str),
+            30,
+        ) {
             Ok(s) => {
                 not_archived[s
                     .trim()
@@ -158,8 +151,7 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
                     .unwrap()]
                 .id
             }
-            Err(e) if e == "" => return ExitResult::SilentErr,
-            Err(e) => return ExitResult::from(e),
+            Err(err) => return CliResult { inner: Err(err) },
         }
     };
 
@@ -175,15 +167,13 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
             .iter()
             .enumerate()
             .map(|(i, a)| format!("{} {}", i, a))
-            .collect::<Vec<String>>()
-            .join("\n");
+            .collect::<Vec<String>>();
 
-        match fzagnostic("Action:", &input, 30) {
+        match fzagnostic("Action:", input.iter().map(String::as_str), 30) {
             Ok(s) => s.split(" ").collect::<Vec<&str>>()[0]
                 .parse::<usize>()
                 .unwrap(),
-            Err(e) if e == "" => return ExitResult::SilentErr,
-            Err(e) => return ExitResult::from(e),
+            Err(err) => return CliResult { inner: Err(err) },
         }
     };
 
@@ -194,10 +184,12 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
 
                 match Command::new(opener).args(&[&b.url]).spawn() {
                     Ok(mut child) => match child.wait().unwrap().code().unwrap() {
-                        0 => ExitResult::Ok,
-                        _ => ExitResult::SilentErr,
+                        0 => CliResult::EMPTY_OK,
+                        _ => CliResult::silent_err(),
                     },
-                    Err(_) => ExitResult::from("failed to start opener command"),
+                    Err(why) => {
+                        CliResult::display_err(format!("failed to start opener command: {}", why))
+                    }
                 }
             })
             .unwrap(),
@@ -205,7 +197,7 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
             .interact_mut(chosen_id, |b| {
                 b.archived = true;
 
-                ExitResult::Ok
+                CliResult::EMPTY_OK
             })
             .unwrap(),
         2 => manager
@@ -220,12 +212,14 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
                         write!(stdin, "{}", b.url).unwrap();
 
                         if child.wait().unwrap().code().unwrap() == 0 {
-                            ExitResult::Ok
+                            CliResult::EMPTY_OK
                         } else {
-                            ExitResult::from("failed to save to clipboard")
+                            CliResult::display_err("failed to save to clipboard")
                         }
                     }
-                    Err(_) => ExitResult::from("failed to start xclip command"),
+                    Err(why) => {
+                        CliResult::display_err(format!("failed to start xclip command: {}", why))
+                    }
                 }
             })
             .unwrap(),
@@ -238,7 +232,7 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> ExitResult {
             manager.data_mut().swap_remove(pos);
             manager.after_interact_mut_hook();
 
-            ExitResult::Ok
+            CliResult::EMPTY_OK
         }
         _ => panic!("unknown code"), // TODO: turn this into a not-panic, but just a simple error
     }
