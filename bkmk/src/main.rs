@@ -123,22 +123,23 @@ pub fn subcmd_add_from_file(manager: &mut BookmarkManager, param: FileParameters
 }
 
 pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
-    let not_archived: Vec<&Bookmark> = manager.data().iter().filter(|b| !b.archived).collect();
+    let not_archived: Vec<&Bookmark> = manager
+        .data()
+        .iter()
+        .filter(|bkmk| !bkmk.archived)
+        .collect();
 
     if not_archived.len() == 0 {
         return CliResult::display_err(format!("There are no unarchived bookmarks to select"));
     }
 
     let chosen_id = {
-        let input = not_archived
-            .iter()
-            .enumerate()
-            .map(|(i, b)| format!("{:>3} {:<95} ({})", i, b.name, b.url))
-            .collect::<Vec<_>>();
-
         match fzagnostic(
             &format!("Bookmark ({}):", not_archived.len()),
-            input.iter().map(String::as_str),
+            not_archived
+                .iter()
+                .enumerate()
+                .map(|(i, bkmk)| format!("{:>3} {:<95} ({})", i, bkmk.name, bkmk.url)),
             30,
         ) {
             Ok(s) => {
@@ -155,85 +156,102 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
         }
     };
 
-    const ACTIONS: &'static [&'static str] = &[
-        "open (via $OPENER -> xdg-open)",
-        "archive",
-        "copy (via xclip)",
-        "delete",
-    ];
+    type ActionSig = fn(&mut BookmarkManager, u32) -> CliResult;
 
-    let chosen_action = {
-        let input = ACTIONS
-            .iter()
-            .enumerate()
-            .map(|(i, a)| format!("{} {}", i, a))
-            .collect::<Vec<String>>();
+    static ACTIONS: [(&str, ActionSig); 5] = [
+        ("open (via $OPENER || xdg-open)", |manager, id| {
+            manager
+                .interact(id, |bkmk| {
+                    let opener = getenv("OPENER").unwrap_or("xdg-open".into());
 
-        match fzagnostic("Action:", input.iter().map(String::as_str), 30) {
-            Ok(s) => s.split(" ").collect::<Vec<&str>>()[0]
-                .parse::<usize>()
-                .unwrap(),
-            Err(err) => return CliResult { inner: Err(err) },
-        }
-    };
-
-    match chosen_action {
-        0 => manager
-            .interact(chosen_id, |b| {
-                let opener = getenv("OPENER").unwrap_or("xdg-open".into());
-
-                match Command::new(opener).args(&[&b.url]).spawn() {
-                    Ok(mut child) => match child.wait().unwrap().code().unwrap() {
-                        0 => CliResult::EMPTY_OK,
-                        _ => CliResult::silent_err(),
-                    },
-                    Err(why) => {
-                        CliResult::display_err(format!("failed to start opener command: {}", why))
+                    match Command::new(opener).args(&[&bkmk.url]).spawn() {
+                        Ok(mut child) => match child.wait().unwrap().code().unwrap() {
+                            0 => CliResult::EMPTY_OK,
+                            _ => CliResult::silent_err(),
+                        },
+                        Err(why) => CliResult::display_err(format!(
+                            "failed to start opener command: {}",
+                            why
+                        )),
                     }
-                }
-            })
-            .unwrap(),
-        1 => manager
-            .interact_mut(chosen_id, |b| {
-                b.archived = true;
+                })
+                .unwrap()
+        }),
+        ("archive", |manager, id| {
+            manager
+                .interact_mut(id, |bkmk| {
+                    bkmk.archived = true;
 
-                CliResult::EMPTY_OK
-            })
-            .unwrap(),
-        2 => manager
-            .interact_mut(chosen_id, |b| {
-                match Command::new("xclip")
-                    .args(&["-sel", "clipboard"])
-                    .stdin(std::process::Stdio::piped())
-                    .spawn()
-                {
-                    Ok(mut child) => {
-                        let stdin = child.stdin.as_mut().unwrap();
-                        write!(stdin, "{}", b.url).unwrap();
+                    CliResult::EMPTY_OK
+                })
+                .unwrap()
+        }),
+        ("copy to clipboard (via xclip)", |manager, id| {
+            manager
+                .interact_mut(id, |bkmk| {
+                    match Command::new("xclip")
+                        .args(&["-sel", "clipboard"])
+                        .stdin(std::process::Stdio::piped())
+                        .spawn()
+                    {
+                        Ok(mut child) => {
+                            let stdin = child.stdin.as_mut().unwrap();
+                            write!(stdin, "{}", bkmk.url).unwrap();
 
-                        if child.wait().unwrap().code().unwrap() == 0 {
-                            CliResult::EMPTY_OK
-                        } else {
-                            CliResult::display_err("failed to save to clipboard")
+                            if child.wait().unwrap().code().unwrap() == 0 {
+                                CliResult::EMPTY_OK
+                            } else {
+                                CliResult::display_err("failed to save to clipboard")
+                            }
                         }
+                        Err(why) => CliResult::display_err(format!(
+                            "failed to start xclip command: {}",
+                            why
+                        )),
                     }
-                    Err(why) => {
-                        CliResult::display_err(format!("failed to start xclip command: {}", why))
-                    }
-                }
-            })
-            .unwrap(),
-        3 => {
+                })
+                .unwrap()
+        }),
+        ("delete", |manager, id| {
             let pos = manager
                 .data()
                 .iter()
-                .position(|b| b.id == chosen_id)
+                .position(|bkmk| bkmk.id == id)
                 .unwrap();
             manager.data_mut().swap_remove(pos);
             manager.after_interact_mut_hook();
 
             CliResult::EMPTY_OK
+        }),
+        ("edit title", |manager, id| {
+            manager
+                .interact_mut(id, |bkmk| match utils::tmp::edit_text(&bkmk.name, Some("txt")) {
+                    Ok((new_title, 0)) => {
+                        bkmk.name = new_title.trim().to_string();
+
+                        CliResult::EMPTY_OK
+                    }
+                    Ok((_, _)) => CliResult::silent_err(),
+                    Err(why) => CliResult::display_err(format!("Failed to edit title: {}", why)),
+                })
+                .unwrap()
+        }),
+    ];
+
+    let action_id = {
+        match fzagnostic(
+            "Action:",
+            ACTIONS
+                .iter()
+                .enumerate()
+                .map(|(i, (name, _))| format!("{} {}", i, name)),
+            30,
+        ) {
+            Ok(s) => s.split(" ").nth(0).unwrap().parse::<usize>().unwrap(),
+            Err(err) => return CliResult { inner: Err(err) },
         }
-        _ => panic!("unknown code"), // TODO: turn this into a not-panic, but just a simple error
-    }
+    };
+
+    // TODO: handle [] (in case the index was just invalid)
+    ACTIONS[action_id].1(manager, chosen_id)
 }

@@ -13,9 +13,10 @@ use crate::error::CliError;
 ///
 /// Returns Err with the error if the error was not intended.
 /// Returns Err with an empty string if fzagnostic was cancelled manually. (Ctrl-C, ESC etc.)
-pub fn fzagnostic<'a, C>(prompt: &str, choices: C, height: u32) -> Result<String, CliError>
+pub fn fzagnostic<'a, C, S>(prompt: &str, choices: C, height: u32) -> Result<String, CliError>
 where
-    C: IntoIterator<Item = &'a str>,
+    C: IntoIterator<Item = S>,
+    S: AsRef<str>,
 {
     match Command::new("fzagnostic")
         .args(&["-h", &format!("{}", height), "-p", prompt])
@@ -27,7 +28,7 @@ where
             let stdin = child.stdin.as_mut().unwrap();
 
             for line in choices.into_iter() {
-                write!(stdin, "{}", line).map_err(|why| {
+                write!(stdin, "{}\n", line.as_ref()).map_err(|why| {
                     CliError::from_display(format!(
                         "fzagnostic: failed to write to process stdin: {}",
                         why

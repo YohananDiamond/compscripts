@@ -8,6 +8,7 @@ output:
 install: output
 	@echo Installing to $(DESTDIR)...
 	cd target/release && cp $(BINARIES) -t $(DESTDIR)
+	cp tools/compscripts-defaultedit -t $(DESTDIR)
 
 check:
 	cargo check
