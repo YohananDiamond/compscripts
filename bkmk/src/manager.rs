@@ -123,7 +123,7 @@ impl BookmarkManager {
                         utils::io::read_line("  Type a new title (type nothing to cancel): ")
                             .map_err(|e| format!("failed to read line: {}", e))?;
 
-                    if line.is_empty() {
+                    if line.trim().is_empty() {
                         return Err(format!("empty title"));
                     } else {
                         line
@@ -135,7 +135,7 @@ impl BookmarkManager {
         }
         .trim()
         .chars()
-        .filter(|c| matches!(c, '\n' | ' ' | '\t' | '\r'))
+        .filter(|c| !matches!(c, '\n' | '\r'))
         .collect::<String>();
 
         let free_id = utils::misc::find_lowest_free_value(&self.used_ids);

@@ -31,7 +31,7 @@ fn fallback_string_if_needed<'a>(string: &'a str) -> &'a str {
 fn main() -> ExitCode {
     let home = getenv("HOME").expect("HOME directory is unset - it is needed");
 
-    let cache_dir: String = std::env::var("XDG_CACHE_DIR")
+    let _cache_dir: String = std::env::var("XDG_CACHE_DIR")
         .ok()
         .unwrap_or_else(|| format!("{}/.cache", home));
 
@@ -47,9 +47,6 @@ fn main() -> ExitCode {
         Ok(var) if var.len() == 0 => fallback_file,
         Ok(var) => var,
     };
-
-    // TODO: lock file
-    let _mutex_file = format!("{}/bkmk-mutex", cache_dir);
 
     let options = cli::Options::parse();
 
@@ -225,14 +222,18 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
         }),
         ("edit title", |manager, id| {
             manager
-                .interact_mut(id, |bkmk| match utils::tmp::edit_text(&bkmk.name, Some("txt")) {
-                    Ok((new_title, 0)) => {
-                        bkmk.name = new_title.trim().to_string();
+                .interact_mut(id, |bkmk| {
+                    match utils::tmp::edit_text(&bkmk.name, Some("txt")) {
+                        Ok((new_title, 0)) => {
+                            bkmk.name = new_title.trim().to_string();
 
-                        CliResult::EMPTY_OK
+                            CliResult::EMPTY_OK
+                        }
+                        Ok((_, _)) => CliResult::silent_err(),
+                        Err(why) => {
+                            CliResult::display_err(format!("Failed to edit title: {}", why))
+                        }
                     }
-                    Ok((_, _)) => CliResult::silent_err(),
-                    Err(why) => CliResult::display_err(format!("Failed to edit title: {}", why)),
                 })
                 .unwrap()
         }),
@@ -252,6 +253,8 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
         }
     };
 
-    // TODO: handle [] (in case the index was just invalid)
-    ACTIONS[action_id].1(manager, chosen_id)
+    match ACTIONS.get(action_id) {
+        Some((_, func)) => func(manager, chosen_id),
+        None => CliResult::display_err(format!("Invalid action ID: {}", action_id)),
+    }
 }

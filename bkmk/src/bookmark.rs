@@ -1,9 +1,11 @@
 use curl::easy::Easy;
 use select::document::Document;
-use select::node::Data;
 use select::predicate::Name;
 use serde::{Deserialize, Serialize};
+
 use std::cmp::Ordering;
+use std::fmt::Display;
+
 use utils::data::{Id, Searchable};
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
@@ -33,12 +35,13 @@ impl Searchable for Bookmark {
     }
 }
 
-pub fn url_get_title(url: &str) -> Result<String, String> {
+pub fn url_get_title(url: &str) -> Result<String, Box<dyn Display + 'static>> {
     let mut vec = Vec::new();
 
     let mut easy = Easy::new();
 
-    easy.url(url).map_err(|e| format!("Curl error: {}", e))?;
+    easy.url(url)
+        .map_err(|why| Box::new(format!("Curl error: {}", why)) as _)?;
 
     {
         let mut transfer = easy.transfer();
@@ -51,41 +54,32 @@ pub fn url_get_title(url: &str) -> Result<String, String> {
 
         transfer
             .perform()
-            .expect("Failed to download/write to buffer");
+            .map_err(|_| Box::new("Failed to download/write to buffer") as _)?;
     }
 
     let code = easy.response_code().unwrap();
     match code {
-        300..=399 => return Err(format!("got redirection code {}", code)),
-        400..=499 => return Err(format!("got client error code {}", code)),
-        500..=599 => return Err(format!("got server error code {}", code)),
+        300..=399 => return Err(Box::new(format!("got redirection code {}", code))), // TODO: parse redirection codes
+        400..=499 => return Err(Box::new(format!("got client error code {}", code))),
+        500..=599 => return Err(Box::new(format!("got server error code {}", code))),
         _ => (),
     }
 
-    let document = match Document::from_read(String::from_utf8_lossy(&vec).as_bytes()) {
-        Ok(doc) => doc,
-        Err(err) => return Err(format!("IO Error: {}", err)),
-    };
+    let document = Document::from_read(String::from_utf8_lossy(&vec).as_bytes())
+        .map_err(|why| Box::new(format!("Failed to parse webpage: {}", why)) as _)?;
 
-    let titles: Vec<_> = document.find(Name("title")).collect();
-
-    if titles.len() == 0 {
-        Err(String::from("Couldn't find any <title> tags in page"))
-    } else {
-        // get the first title tag, ignore the rest
-        let children = titles[0]
+    if let Some(title_tag) = document.find(Name("title")).nth(0) {
+        // get the first text element of the title tag (can there even be more than that?), ignore the rest
+        if let Some(title) = title_tag
             .children()
-            .filter(|x| match x.data() {
-                Data::Text(_) => true,
-                _ => false,
-            })
-            .collect::<Vec<_>>();
-
-        if children.len() == 0 {
-            Err(String::from("Empty <title> tag found"))
+            .filter_map(|node| node.as_text())
+            .next()
+        {
+            Ok(title.to_string())
         } else {
-            // there's no unwrap here, so I guess I need to use this syntax.
-            Ok(String::from(children[0].as_text().unwrap()))
+            Err(Box::new("Empty <title> tag"))
         }
+    } else {
+        Err(Box::new("Couldn't find any <title> tags in page"))
     }
 }
