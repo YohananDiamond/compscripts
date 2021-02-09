@@ -68,7 +68,9 @@ pub fn edit_text(text: &str, extension: Option<&str>) -> Result<(String, i32), S
             Err(why) => return Err(format!("failed to create temp file: {}", why)),
         };
 
-        tmpfile.read_to_string(&mut buf).expect("failed to read buffer to string");
+        tmpfile
+            .read_to_string(&mut buf)
+            .expect("failed to read buffer to string");
     }
 
     // remove the file, if it still exists

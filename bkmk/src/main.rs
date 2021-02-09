@@ -225,7 +225,13 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
                 .interact_mut(id, |bkmk| {
                     match utils::tmp::edit_text(&bkmk.name, Some("txt")) {
                         Ok((new_title, 0)) => {
-                            bkmk.name = new_title.trim().to_string();
+                            let new_title = new_title
+                                .trim()
+                                .chars()
+                                .filter(|c| !matches!(c, '\n' | '\r'))
+                                .collect::<String>();
+
+                            bkmk.name = new_title;
 
                             CliResult::EMPTY_OK
                         }
