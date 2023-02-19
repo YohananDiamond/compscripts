@@ -1,0 +1,13 @@
+[package]
+name = "mass-rename"
+version = "0.1.0"
+authors = ["YohananDiamond <mitonanan12@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+utils = { path = "../utils" }
+clap = { version = "4.1.6", features = ["derive"] }
+
+[[bin]]
+name = "mass-rename"
+path = "src/main.rs"

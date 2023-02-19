@@ -1,6 +1,5 @@
 [workspace]
-# members = ["bkmk", "utils", "itmn", "mass-rename"]
-members = ["utils", "itmn"]
+members = ["bkmk", "utils", "itmn", "mass-rename"]
 
 [profile.release]
 opt-level = "s"
