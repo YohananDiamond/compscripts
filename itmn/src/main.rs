@@ -1,6 +1,6 @@
-#![feature(termination_trait_lib)]
+#![feature(iter_intersperse)]
 
-use clap::Clap;
+use clap::Parser;
 
 use std::collections::HashSet;
 use std::io;
@@ -32,6 +32,15 @@ fn main() -> ExitCode {
     let subcmd = options.subcmd;
     let path_string = options.path.unwrap_or(itmn_file);
     let path = Path::new(&path_string);
+
+    const LOCK_NAME: &str = "itmn";
+    let _lock = match utils::tmp::make_folder_lock(LOCK_NAME) {
+        Ok(lock) => lock,
+        Err(why) => {
+            eprintln!("Failed to create lock `{}`: {}", LOCK_NAME, why);
+            return ExitCode::new(1);
+        }
+    };
 
     let contents = match utils::io::touch_read(&path) {
         Ok(string) => string,
@@ -253,7 +262,7 @@ fn subcmd_selection<R: Report>(
         }
     };
 
-    match args.action.unwrap_or(SelAct::ListBrief) {
+    match args.action.unwrap_or(SelAct::ListTree) {
         SelAct::Modify(sargs) => {
             let proceed = |manager: &mut ItemManager| {
                 for &id in &range {
@@ -321,7 +330,7 @@ fn subcmd_selection<R: Report>(
                         .add_child(
                             RefId(id),
                             &sargs.name,
-                            sargs.context.as_ref().map_or("", |s| s.as_str()),
+                            sargs.context.as_ref().map_or("", String::as_ref),
                             match sargs.note {
                                 Some(false) | None => ItemState::Todo,
                                 Some(true) => ItemState::Note,
@@ -375,6 +384,49 @@ fn subcmd_selection<R: Report>(
                 })
                 .unwrap()
         }
+        SelAct::EditName => {
+            let name_lines: Vec<(u32, String)> = range
+                .iter()
+                .map(|&id| {
+                    (
+                        id,
+                        manager
+                            .interact_mut(RefId(id), |item| item.name.clone()) // holy shit I don't wanna clone
+                            .unwrap(),
+                    )
+                })
+                .collect();
+
+            let names_string = name_lines.iter().map(|(_, s)| s.as_str()).intersperse("\n").collect::<String>();
+
+            let edited_string = match tmp::edit_text(&names_string, Some("txt")) {
+                Ok((new, 0)) => new,
+                Ok((_, code)) => return Err(format!("non-zero exit code: {}", code)),
+                Err(e) => return Err(format!("failed to edit text: {}", e)),
+            };
+
+            let edited_lines = edited_string
+                .split('\n')
+                .filter(|line| !line.is_empty())
+                .collect::<Vec<_>>();
+
+            if name_lines.len() != edited_lines.len() {
+                return Err(format!("Incompatible amount of lines: {} (selection size) and {} (amount after editing)", name_lines.len(), edited_lines.len()));
+            }
+
+            for (&id, new_name) in name_lines.iter().map(|(id, _)| id).zip(edited_lines.iter()) {
+                manager
+                    .interact_mut(RefId(id), |i| {
+                        i.set_name(new_name);
+                    })
+                    .unwrap();
+            }
+
+            Ok(ProgramResult {
+                should_save: true,
+                exit_status: 0,
+            })
+        }
         SelAct::EditDescription => {
             if range.len() != 1 {
                 return Err("The selection should have exactly one item.".into());
@@ -398,19 +450,45 @@ fn subcmd_selection<R: Report>(
                 .unwrap()
         }
         SelAct::Done => {
-            for &id in &range {
-                manager
-                    .change_item_state(RefId(id), |previous| match previous {
-                        ItemState::Todo => ItemState::Done,
-                        other => other,
-                    })
-                    .unwrap(); // safe because we already made sure all IDs in the range exist.
-            }
+            let selection: Vec<&Item> = range
+                .iter()
+                .map(|&id| manager.find(RefId(id)).unwrap())
+                .collect();
 
-            Ok(ProgramResult {
-                should_save: true,
-                exit_status: 0,
-            })
+            R::report(
+                "Items to be marked as done",
+                &mut selection.into_iter(),
+                &ReportInfo {
+                    config: report_cfg,
+                    indent: 0,
+                    filter: None,
+                    depth: ReportDepth::Tree,
+                },
+                &mut io::stdout(),
+            )
+            .unwrap();
+
+            if confirm_with_default(true) {
+                for &id in &range {
+                    manager
+                        .change_item_state(RefId(id), |previous| match previous {
+                            // TODO: rename to map_state
+                            ItemState::Todo => ItemState::Done,
+                            other => other,
+                        })
+                        .unwrap(); // safe because we already made sure all IDs in the range exist.
+                }
+
+                Ok(ProgramResult {
+                    should_save: true,
+                    exit_status: 0,
+                })
+            } else {
+                Ok(ProgramResult {
+                    should_save: false,
+                    exit_status: 1,
+                })
+            }
         }
         SelAct::ListTree => {
             let selected: Vec<&Item> = range

@@ -3,10 +3,10 @@
 // TODO: add a way to recursively sort items, like what was done with filters.
 
 use crate::item::{Item, ItemState};
-use utils::cowstr::CowStr;
 
 use std::io;
 use std::io::Write;
+use std::borrow::Cow;
 
 #[derive(Clone, Copy)]
 /// Specifies the way the items should be shown on the screen.
@@ -61,21 +61,23 @@ pub struct ReportInfo<'a> {
 
 pub trait Report {
     fn display(item: &Item, info: &ReportInfo, out: &mut dyn Write) -> io::Result<()>;
+
     fn display_all(
         items: &mut dyn Iterator<Item = &Item>,
         info: &ReportInfo,
         out: &mut dyn Write,
     ) -> io::Result<()>;
+
     fn report(
         label: &str,
         items: &mut dyn Iterator<Item = &Item>,
         info: &ReportInfo,
         out: &mut dyn Write,
     ) -> io::Result<()> {
-        let length_message: CowStr = match items.size_hint().0 {
-            0 | 1 => "No items to be displayed".into(),
-            2 => "1 item to be displayed".into(),
-            i => format!("{} items to be displayed", i - 1).into(),
+        let length_message: Cow<'_, str> = match items.size_hint().0 {
+            0 | 1 => Cow::Borrowed("No items to be displayed"),
+            2 => Cow::Borrowed("1 item to be displayed"),
+            i => Cow::Owned(format!("{} items to be displayed", i - 1)),
         };
 
         writeln!(out, "{} | {}", label, length_message)?;
