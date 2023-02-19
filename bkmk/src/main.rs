@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Command;
 
-use clap::Clap;
+use clap::Parser;
 
 mod cli;
 use cli::*;
@@ -50,23 +50,39 @@ fn main() -> ExitCode {
 
     let options = cli::Options::parse();
 
+    // TODO: make this work again
+    // ctrlc::set_handler(|| panic!("CTRL-C found"));
+
+    const LOCK_NAME: &str = "bkmk";
+    let _lock = match utils::tmp::make_folder_lock(LOCK_NAME) {
+        Ok(lock) => lock,
+        Err(why) => {
+            eprintln!("Failed to create lock `{}`: {}", LOCK_NAME, why);
+            return ExitCode::new(1);
+        }
+    };
+
     // try blocks :))
     (|| -> CliResult {
         let path_string = options.path.unwrap_or(bkmk_file);
         let path = Path::new(&path_string);
 
-        let contents = utils::io::touch_read(&path).or_else(|why| {
-            CliResult::display_err(format!("Failed to load file: {}", why)).into()
-        })?;
+        let contents = match utils::io::touch_read(&path) {
+            Ok(o) => o,
+            Err(e) => return CliResult::display_err(format!("Failed to load file: {}", e)),
+        };
 
         let new_contents = fallback_string_if_needed(&contents);
 
-        let data: Vec<Bookmark> = BookmarkManager::import(new_contents).or_else(|why| {
-            CliResult::display_err(format!("Failed to parse file: {}", why)).into()
-        })?;
+        let data: Vec<Bookmark> = match BookmarkManager::import(new_contents) {
+            Ok(o) => o,
+            Err(e) => return CliResult::display_err(format!("Failed to parse file: {}", e)),
+        };
 
-        let mut manager =
-            BookmarkManager::new(data).or_else(|err| CliResult::display_err(err).into())?;
+        let mut manager = match BookmarkManager::new(data) {
+            Ok(o) => o,
+            Err(e) => return CliResult::display_err(e),
+        };
 
         match options.subcmd {
             SubCmd::Add(param) => subcmd_add(&mut manager, param),
@@ -74,11 +90,10 @@ fn main() -> ExitCode {
             SubCmd::Menu => subcmd_menu(&mut manager),
         }?;
 
-        manager.save_if_modified(&path).or_else(|why| {
-            CliResult::display_err(format!("Failed to save changes to file: {}", why)).into()
-        })?;
-
-        CliResult::EMPTY_OK
+        match manager.save_if_modified(&path) {
+            Ok(_) => CliResult::EMPTY_OK,
+            Err(e) => CliResult::display_err(format!("Failed to save changes to file: {}", e)),
+        }
     })()
     .process()
 }
@@ -132,7 +147,7 @@ pub fn subcmd_menu(manager: &mut BookmarkManager) -> CliResult {
 
     let chosen_id = {
         match fzagnostic(
-            &format!("Bookmark ({}):", not_archived.len()),
+            "Bookmark:",
             not_archived
                 .iter()
                 .enumerate()

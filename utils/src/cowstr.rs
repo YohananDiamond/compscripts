@@ -1,7 +1,10 @@
+#![allow(deprecated)]
+
 use std::fmt;
 use std::ops::Deref;
 
 #[derive(Debug, Clone)]
+#[deprecated]
 pub enum CowStr<'a> {
     Ref(&'a str),
     Owned(Box<str>),

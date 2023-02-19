@@ -29,6 +29,92 @@ pub fn make_tmp(extension: Option<&str>) -> PathBuf {
     }
 }
 
+pub mod folder_lock {
+    use std::io::{self, ErrorKind};
+    use std::path::PathBuf;
+    use std::fmt;
+
+    #[derive(Debug)]
+    pub enum LockError {
+        InvalidLockName,
+        AlreadyLocked,
+        IoError(io::Error),
+    }
+
+    impl fmt::Display for LockError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::InvalidLockName => write!(f, "Invalid lock name"),
+                Self::AlreadyLocked => write!(f, "Lock already exists (other instance of this application might be running)"),
+                Self::IoError(err) => write!(f, "I/O error: {}", err),
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum ReleaseError {
+        AlreadyReleased,
+        IoError(io::Error),
+    }
+
+    pub struct FolderLock {
+        lock_path: PathBuf,
+        released: bool,
+    }
+
+    impl FolderLock {
+        pub fn lock(lock_name: &str) -> Result<Self, LockError> {
+            if lock_name.chars().any(|c| matches!(c, '/' | '\\')) {
+                return Err(LockError::InvalidLockName);
+            }
+
+            let mut path = std::env::temp_dir();
+            path.push(format!("{}.lock", lock_name));
+
+            if let Err(e) = std::fs::create_dir(&path) {
+                return Err(match e.kind() {
+                    ErrorKind::AlreadyExists => LockError::AlreadyLocked,
+                    _ => LockError::IoError(e),
+                });
+            }
+
+            Ok(Self {
+                lock_path: path,
+                released: false,
+            })
+        }
+
+        pub fn release(&mut self) -> Result<(), ReleaseError> {
+            if let Err(e) = std::fs::remove_dir(&self.lock_path) {
+                return Err(match e.kind() {
+                    ErrorKind::NotFound => ReleaseError::AlreadyReleased,
+                    _ => ReleaseError::IoError(e),
+                });
+            }
+
+            self.released = true;
+            Ok(())
+        }
+    }
+
+    impl Drop for FolderLock {
+        fn drop(&mut self) {
+            if !self.released {
+                match self.release() {
+                    Ok(()) | Err(ReleaseError::AlreadyReleased) => {}
+                    Err(other) => Err(other).expect("failed to release lock"),
+                }
+            }
+        }
+    }
+}
+
+pub fn make_folder_lock(
+    lock_name: &str,
+) -> Result<folder_lock::FolderLock, folder_lock::LockError> {
+    folder_lock::FolderLock::lock(lock_name)
+}
+
 pub fn edit_text(text: &str, extension: Option<&str>) -> Result<(String, i32), String> {
     let tmpbuf = make_tmp(extension);
 
@@ -47,8 +133,10 @@ pub fn edit_text(text: &str, extension: Option<&str>) -> Result<(String, i32), S
     }
 
     // edit file
-    // TODO: better customization of this option (EDITOR does not necessarily handle both the GUI and TTY cases)
-    let editor = std::env::var("EDITOR").unwrap_or("compscripts-defaultedit".into());
+    let editor = std::env::var("MAYBE_GRAPHICAL_EDITOR")
+        .or_else(|_| std::env::var("EDITOR"))
+        .unwrap_or_else(|_| "compscripts-defaultedit".into());
+
     let code = match Command::new(&editor)
         .args(&[tmpbuf.as_path().to_str().unwrap()])
         .spawn()

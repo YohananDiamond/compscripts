@@ -1,36 +1,40 @@
-use clap::Clap;
+use clap::Parser;
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct Options {
-    #[clap(
+    #[arg(
         short,
         long,
-        about = "the path to the bookmarks file (default: $BKMN_FILE -> ~/.local/share/bkmk)"
+        help = "the path to the bookmarks file (default: $BKMN_FILE -> ~/.local/share/bkmk)"
     )]
     pub path: Option<String>,
-    #[clap(subcommand)]
+
+    #[command(subcommand)]
     pub subcmd: SubCmd,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub enum SubCmd {
-    #[clap(about = "adds an URL to the bookmarks list")]
+    #[command(about = "adds an URL to the bookmarks list")]
     Add(AddParameters),
-    #[clap(about = "adds the URLs from a newline-delimited bookmarks list file")]
+
+    #[command(about = "adds the URLs from a newline-delimited bookmarks list file")]
     AddFromFile(FileParameters),
-    #[clap(about = "opens an interactive menu for managing bookmarks using fzagnostic")]
+
+    #[command(about = "opens an interactive menu for managing bookmarks using fzagnostic")]
     Menu,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct AddParameters {
-    #[clap(about = "the URL of the bookmark")]
+    #[arg(help = "the URL of the bookmark")]
     pub url: String,
-    #[clap(short, long, about = "the title of the bookmark")]
+
+    #[arg(short, long, help = "the title of the bookmark")]
     pub title: Option<String>,
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 pub struct FileParameters {
     pub file: String,
 }

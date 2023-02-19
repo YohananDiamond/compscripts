@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::process::Termination;
+use std::ops::ControlFlow;
 
 #[derive(Clone, Copy)]
 pub struct ExitCode {
@@ -53,8 +54,8 @@ impl ExitCode {
 }
 
 impl Termination for ExitCode {
-    fn report(self) -> i32 {
-        self.code
+    fn report(self) -> std::process::ExitCode {
+        std::process::ExitCode::from(self.code as u8)
     }
 }
 
@@ -146,19 +147,24 @@ impl<T> Into<Result<T, CliError>> for CliResult<T> {
     }
 }
 
+impl<T> std::ops::FromResidual<CliError> for CliResult<T> {
+    fn from_residual(residual: CliError) -> Self {
+        Self { inner: Err(residual) }
+    }
+}
+
 impl<T> std::ops::Try for CliResult<T> {
-    type Ok = T;
-    type Error = CliError;
+    type Output = T;
+    type Residual = CliError;
 
-    fn into_result(self) -> Result<Self::Ok, Self::Error> {
-        self.inner
+    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+        match self.inner {
+            Ok(x) => ControlFlow::Continue(x),
+            Err(x) => ControlFlow::Break(x),
+        }
     }
 
-    fn from_error(error: Self::Error) -> Self {
-        Self { inner: Err(error) }
-    }
-
-    fn from_ok(ok: Self::Ok) -> Self {
-        Self { inner: Ok(ok) }
+    fn from_output(output: T) -> Self {
+        Self { inner: Ok(output) }
     }
 }
