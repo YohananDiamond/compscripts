@@ -13,7 +13,10 @@ seted() {
   return 1
 }
 
-seted "nvim" "vim" "vi" "nano" || exit 1
+seted "nvim" "vim" "vi" "nano" || {
+  printf >&2 "No suitable text editor found!\n"
+  exit 1
+}
 
 if [ ! -t 2 ] || [ ! -t 1 ]; then
   exec "${TERMINAL:-xterm}" -e "$EDITOR" "$@"

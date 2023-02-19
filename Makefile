@@ -1,9 +1,11 @@
 DESTDIR := ~/.local/bin
 RELEASE := true
-BINARIES := bkmk itmn
+BINARIES := bkmk itmn mass-rename
 
 output:
 	if [ $(RELEASE) = true ]; then cargo build --release; else cargo build; fi
+
+build: output
 
 install: output
 	@echo Installing to $(DESTDIR)...
